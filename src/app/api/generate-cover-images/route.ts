@@ -83,6 +83,9 @@ export async function POST(request: NextRequest) {
               },
               openAiApiKey
             );
+
+    const jobId = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    store.createCoverImageJob(jobId, previewKey, effectivePrompt[0]);
     store.updateCoverImageJob(jobId, { status: "running" });
 
     // Fire and forget: generate images in the background, storing progress on the job
