@@ -15,7 +15,11 @@ export async function uploadPdfToOpenAI(
   apiKey: string
 ): Promise<string> {
   const formData = new FormData();
-  const blob = new Blob([fileBuffer], { type: "application/pdf" });
+  const fileArrayBuffer = fileBuffer.buffer.slice(
+    fileBuffer.byteOffset,
+    fileBuffer.byteOffset + fileBuffer.byteLength
+  ) as ArrayBuffer;
+  const blob = new Blob([fileArrayBuffer], { type: "application/pdf" });
   formData.append("file", blob, filename);
   formData.append("purpose", "user_data");
 

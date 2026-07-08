@@ -2,15 +2,30 @@ import { PreviewState, CoverImage } from "./types";
 
 const NOCODB_BASE_URL = "https://ndb.startmunich.de";
 
-async function nocoFetch(path: string, options: RequestInit = {}): Promise<unknown> {
+function getNocoConfig(): { apiKey: string; tableId: string } | null {
   const apiKey = process.env.NOCODB_API_KEY;
   const tableId = process.env.TABLE_ID;
-  const url = `${NOCODB_BASE_URL}/api/v2/tables/${tableId}${path}`;
+
+  if (!apiKey || !tableId) return null;
+  return { apiKey, tableId };
+}
+
+export function isNocoConfigured(): boolean {
+  return Boolean(getNocoConfig());
+}
+
+async function nocoFetch(path: string, options: RequestInit = {}): Promise<unknown> {
+  const config = getNocoConfig();
+  if (!config) {
+    throw new Error("NocoDB is not configured");
+  }
+
+  const url = `${NOCODB_BASE_URL}/api/v2/tables/${config.tableId}${path}`;
 
   const response = await fetch(url, {
     ...options,
     headers: {
-      "xc-token": apiKey!,
+      "xc-token": config.apiKey,
       "Content-Type": "application/json",
       ...(options.headers as Record<string, string> || {}),
     },
@@ -61,6 +76,8 @@ function deserializeFromStorage(json: string): PreviewState {
 }
 
 export async function nocoGetAll(): Promise<Array<{ rowId: number; preview: PreviewState }>> {
+  if (!getNocoConfig()) return [];
+
   const data = await nocoFetch("/records?limit=200&sort=-UpdatedAt") as {
     list: Array<Record<string, unknown>>;
   };
@@ -76,6 +93,8 @@ export async function nocoGetAll(): Promise<Array<{ rowId: number; preview: Prev
 export async function nocoGetByKey(
   key: string
 ): Promise<{ rowId: number; preview: PreviewState } | null> {
+  if (!getNocoConfig()) return null;
+
   const data = await nocoFetch(
     `/records?where=(Title,eq,${encodeURIComponent(key)})&limit=1`
   ) as { list: Array<Record<string, unknown>> };
@@ -90,6 +109,8 @@ export async function nocoGetByKey(
 }
 
 export async function nocoCreate(key: string, preview: PreviewState): Promise<number> {
+  if (!getNocoConfig()) return 0;
+
   const data = await nocoFetch("/records", {
     method: "POST",
     body: JSON.stringify({
@@ -102,6 +123,8 @@ export async function nocoCreate(key: string, preview: PreviewState): Promise<nu
 }
 
 export async function nocoUpdate(rowId: number, preview: PreviewState): Promise<void> {
+  if (!getNocoConfig()) return;
+
   await nocoFetch("/records", {
     method: "PATCH",
     body: JSON.stringify({
@@ -112,6 +135,8 @@ export async function nocoUpdate(rowId: number, preview: PreviewState): Promise<
 }
 
 export async function nocoDelete(rowId: number): Promise<void> {
+  if (!getNocoConfig()) return;
+
   await nocoFetch("/records", {
     method: "DELETE",
     body: JSON.stringify({ Id: rowId }),
