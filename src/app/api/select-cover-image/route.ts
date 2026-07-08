@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "imageIndex must be 0, 1, or 2" }, { status: 400 });
     }
 
-    const preview = store.getPreview(previewKey);
+    const preview = await store.getPreview(previewKey);
     if (!preview) {
       return NextResponse.json({ error: "Preview not found" }, { status: 404 });
     }
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     preview.subject = subject;
     preview.updatedAt = new Date();
 
-    store.storePreview(previewKey, preview);
+    await store.storePreview(previewKey, preview);
 
     return NextResponse.json({
       success: true,

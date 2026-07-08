@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "key is required" }, { status: 400 });
     }
 
-    const preview = store.getPreview(key);
+    const preview = await store.getPreview(key);
     if (!preview) {
       return NextResponse.json({ error: "Preview not found" }, { status: 404 });
     }
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       apiKey: brevoApiKey,
     });
 
-    store.updatePreview(key, {
+    await store.updatePreview(key, {
       status: "sent",
       sentAt: new Date(),
       brevoCampaignId: campaignId,

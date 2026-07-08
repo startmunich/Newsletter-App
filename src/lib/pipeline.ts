@@ -6,12 +6,11 @@ import {
   generateDraftWithFiles,
   generateDraftText,
   runQaPass,
-  generateMemePrompt,
-  generateMultipleImages,
   generateCoverImages,
+  buildDefaultCoverPrompt,
 } from "./openai-client";
 import { compressPdf } from "./nutrient";
-import { DRAFT_SYSTEM_PROMPT, buildDraftUserPrompt, buildMultipleImagePrompts } from "./prompts";
+import { DRAFT_SYSTEM_PROMPT, buildDraftUserPrompt } from "./prompts";
 import { renderNewsletterHtml, renderNewsletterText, extractSubjectLine } from "./renderer";
 
 const EXTERNAL_CALENDAR = "cal-1MxD65bgV0Hcb0r";
@@ -28,8 +27,6 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
     "Fetching Luma events",
     "Drafting newsletter",
     "QA review",
-    "Generating cover images",
-    "Generating meme",
     "Rendering HTML",
     "Saving preview",
   ];
@@ -157,96 +154,7 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
     }
     store.updateStep(jobId, "QA review", { status: "done", message: "QA pass complete" });
 
-    // Step 6: Generate cover images
-    store.updateStep(jobId, "Generating cover images", { status: "running" });
-    try {
-      console.log("Pipeline: Starting cover image generation...");
-      const coverImages = await generateCoverImages(draft.intro, input.openAiApiKey);
-      console.log(`Pipeline: Received ${coverImages.length} cover images from generateCoverImages`);
-      
-      if (coverImages.length > 0) {
-        draft.coverImages = coverImages.map((img, index) => ({
-          prompt: img.prompt,
-          imageBase64: img.imageBase64,
-          index,
-        }));
-        // Default to first image
-        draft.selectedCoverImageIndex = 0;
-        
-        console.log(`Pipeline: Stored ${draft.coverImages.length} cover images in draft`);
-        store.updateStep(jobId, "Generating cover images", {
-          status: "done",
-          message: `${coverImages.length} image(s) generated`,
-        });
-      } else {
-        console.log("Pipeline: No cover images generated, setting empty array");
-        draft.coverImages = [];
-        store.updateStep(jobId, "Generating cover images", {
-          status: "done",
-          message: "No cover images generated",
-        });
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("Cover image generation error:", msg);
-      draft.coverImages = [];
-      store.updateStep(jobId, "Generating cover images", {
-        status: "done",
-        message: `Cover image generation failed: ${msg}`,
-      });
-    }
-
-    // Step 7: Generate meme
-    store.updateStep(jobId, "Generating meme", { status: "running" });
-
-    const internalNewsSection = draft.sections.find(
-      (s) => s.title.toLowerCase().includes("internal news") && !s.title.toLowerCase().includes("event")
-    );
-
-    if (internalNewsSection && internalNewsSection.items.length > 0) {
-      try {
-        const imagePrompts = buildMultipleImagePrompts(
-          internalNewsSection.items.map((i) => ({ title: i.title, summary: i.summary }))
-        );
-
-        const generatedImages = await generateMultipleImages(imagePrompts, input.openAiApiKey);
-
-        const images = generatedImages
-          .filter((img) => img.imageBase64) // Only include successfully generated images
-          .map((img) => ({
-            prompt: img.prompt,
-            imageBase64: img.imageBase64 || undefined,
-            type: img.type as "meme" | "normal",
-          }));
-
-        draft.internalNewsMeme = {
-          enabled: images.length > 0,
-          images: images.length > 0 ? images : undefined,
-        };
-
-        store.updateStep(jobId, "Generating meme", {
-          status: "done",
-          message: `${images.length} image(s) generated`,
-        });
-      } catch (error) {
-        draft.internalNewsMeme = {
-          enabled: false,
-          error: error instanceof Error ? error.message : "Unknown error",
-        };
-        store.updateStep(jobId, "Generating meme", {
-          status: "done",
-          message: "Image generation failed (non-critical)",
-        });
-      }
-    } else {
-      draft.internalNewsMeme = { enabled: false };
-      store.updateStep(jobId, "Generating meme", {
-        status: "done",
-        message: "No internal news for images",
-      });
-    }
-
-    // Step 8: Render HTML
+    // Step 6: Render HTML
     store.updateStep(jobId, "Rendering HTML", { status: "running" });
     const html = renderNewsletterHtml(draft);
     const text = renderNewsletterText(draft);
@@ -271,9 +179,51 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
       monthGenerated: month,
     };
 
-    store.storePreview(previewKey, previewState);
+    // Start cover image generation in background automatically
+    const coverJobId = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const coverPrompt = buildDefaultCoverPrompt({
+      month: draft.month,
+      subject: draft.subject,
+      intro: draft.intro,
+    });
+    store.createCoverImageJob(coverJobId, previewKey, coverPrompt);
+    store.updateCoverImageJob(coverJobId, { status: "running" });
+    previewState.coverImageJobId = coverJobId;
+
+    await store.storePreview(previewKey, previewState);
     store.updateJob(jobId, { status: "done", previewKey });
     store.updateStep(jobId, "Saving preview", { status: "done", message: "Preview ready" });
+
+    // Fire and forget cover image generation
+    ;(async () => {
+      try {
+        const apiKey = input.openAiApiKey;
+        const images = await generateCoverImages(coverPrompt, apiKey, (image) => {
+          store.addCoverImageToJob(coverJobId, {
+            prompt: image.prompt,
+            imageBase64: image.imageBase64,
+            index: image.index,
+          });
+        });
+        const currentPreview = await store.getPreview(previewKey);
+        if (currentPreview) {
+          currentPreview.structured.coverImages = images.map((img, index) => ({
+            prompt: img.prompt,
+            imageBase64: img.imageBase64,
+            index,
+          }));
+          currentPreview.updatedAt = new Date();
+          await store.storePreview(previewKey, currentPreview);
+        }
+        store.updateCoverImageJob(coverJobId, {
+          status: images.length > 0 ? "done" : "error",
+          error: images.length === 0 ? "No images generated" : undefined,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        store.updateCoverImageJob(coverJobId, { status: "error", error: msg });
+      }
+    })();
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     store.updateJob(jobId, { status: "error", error: errorMessage });

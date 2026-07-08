@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "feedback is required" }, { status: 400 });
     }
 
-    const preview = store.getPreview(key);
+    const preview = await store.getPreview(key);
     if (!preview) {
       return NextResponse.json({ error: "Preview not found" }, { status: 404 });
     }
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       monthGenerated: preview.monthGenerated,
     };
 
-    store.storePreview(newKey, newPreview);
+    await store.storePreview(newKey, newPreview);
 
     return NextResponse.json({ newKey });
   } catch (error) {

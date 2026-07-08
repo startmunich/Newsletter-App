@@ -246,10 +246,17 @@ export async function generateMemeImage(
 ): Promise<string | null> {
   try {
     console.log("generateMemeImage: Starting image generation...");
+    console.log("generateMemeImage: API key present:", !!apiKey, "length:", apiKey?.length || 0);
+    
+    if (!apiKey) {
+      console.error("generateMemeImage: No API key provided!");
+      return null;
+    }
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
+    console.log("generateMemeImage: Sending request to OpenAI...");
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: {
@@ -257,31 +264,42 @@ export async function generateMemeImage(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "dall-e-3",
+        model: "gpt-image-1",
         prompt,
         n: 1,
         size: "1024x1024",
-        quality: "standard",
-        response_format: "b64_json",
       }),
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
+    console.log("generateMemeImage: Response status:", response.status);
+    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`generateMemeImage: API failed: ${response.status} ${errorText}`);
+      console.error(`generateMemeImage: API failed with status ${response.status}`);
+      console.error(`generateMemeImage: Error response:`, errorText);
       return null;
     }
 
     const data = await response.json();
-    const imageBase64 = data.data?.[0]?.b64_json || null;
-    console.log(`generateMemeImage: Image generated successfully, base64 length: ${imageBase64?.length || 0}`);
+    console.log("generateMemeImage: API response received");
+    
+    // gpt-image-1 returns b64_json directly
+    const imageBase64 = data.data?.[0]?.b64_json;
+    if (!imageBase64) {
+      console.error("generateMemeImage: No image data in response");
+      return null;
+    }
+
+    console.log(`generateMemeImage: Image generated successfully, base64 length: ${imageBase64.length}`);
     return imageBase64;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error("generateMemeImage: Request timeout");
+      console.error("generateMemeImage: Request timeout after 60 seconds");
+    } else if (error instanceof Error) {
+      console.error("generateMemeImage: Fetch error:", error.name, error.message);
     } else {
       console.error("generateMemeImage: Fetch error:", error);
     }
@@ -326,47 +344,46 @@ export async function generateMultipleImages(
   return results;
 }
 
+export function buildDefaultCoverPrompt(context: {
+  month: string;
+  subject: string;
+  intro: string;
+}): string {
+  return `Professional tech newsletter cover illustration for START Munich (${context.month}). Modern, clean and vibrant design suitable for an email header. Theme: startups, innovation, technology and community. Abstract geometric shapes with subtle tech motifs. No text in the image.`;
+}
+
 export async function generateCoverImages(
-  newsletter: string,
-  apiKey: string
+  prompt: string,
+  apiKey: string,
+  onImage?: (image: { prompt: string; imageBase64: string; index: number }) => void,
+  count = 3
 ): Promise<Array<{ prompt: string; imageBase64: string }>> {
   const results: Array<{ prompt: string; imageBase64: string }> = [];
 
-  // Generate 3 different cover image prompts based on newsletter content
-  const coverPrompts = [
-    `Professional tech newsletter cover illustration for START Munich July 2026. Modern, clean design with tech elements, professional colors, suitable for email header. Abstract geometric shapes, tech icons, innovation theme.`,
-    `Modern corporate newsletter cover for START Munich July 2026. Professional business illustration with networking theme, collaborative spirit, team dynamics. Contemporary design, vibrant colors, suitable as email banner.`,
-    `Tech community newsletter cover for START Munich July 2026. Innovative and dynamic illustration showing people, technology, ideas converging. Modern aesthetic, inspiring design, suitable for email header.`,
-  ];
-
-  console.log("Starting cover image generation for 3 images...");
+  console.log(`Starting cover image generation for ${count} images...`);
 
   try {
-    for (let i = 0; i < coverPrompts.length; i++) {
-      const prompt = coverPrompts[i];
-      console.log(`Generating cover image ${i + 1}/3...`);
+    for (let i = 0; i < count; i++) {
+      console.log(`Generating cover image ${i + 1}/${count}...`);
       const imageBase64 = await generateMemeImage(prompt, apiKey);
       if (imageBase64) {
-        console.log(`Cover image ${i + 1}/3 generated successfully`);
-        results.push({
-          prompt,
-          imageBase64,
-        });
+        console.log(`Cover image ${i + 1}/${count} generated successfully`);
+        results.push({ prompt, imageBase64 });
+        onImage?.({ prompt, imageBase64, index: i });
       } else {
-        console.warn(`Cover image ${i + 1}/3 generation returned null`);
+        console.warn(`Cover image ${i + 1}/${count} generation returned null`);
       }
-      
-      // Add a small delay between requests to avoid rate limiting (except after last image)
-      if (i < coverPrompts.length - 1) {
-        console.log("Waiting 2 seconds before next image...");
-        await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Small delay between requests to avoid rate limiting (except after last image)
+      if (i < count - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
   } catch (error) {
     console.error("Cover image generation error:", error);
   }
 
-  console.log(`Cover image generation complete: ${results.length}/3 images generated`);
+  console.log(`Cover image generation complete: ${results.length}/${count} images generated`);
   return results;
 }
 

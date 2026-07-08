@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    const previews = store.getAllPreviews();
+    const previews = await store.getAllPreviews();
     return NextResponse.json(previews);
   } catch (error) {
     console.error("Failed to get preview list:", error);

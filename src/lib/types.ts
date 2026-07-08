@@ -24,6 +24,15 @@ export interface CoverImage {
   index: number; // 0, 1, or 2
 }
 
+export interface CoverImageJob {
+  id: string;
+  previewKey: string;
+  status: "pending" | "running" | "done" | "error";
+  prompt: string;
+  images: CoverImage[];
+  error?: string;
+}
+
 export interface InternalNewsMeme {
   enabled: boolean;
   images?: GeneratedImage[];
@@ -73,9 +82,10 @@ export interface PreviewState {
   brevoCampaignId?: number;
   testEmailSentAt?: Date;
   testEmailTo?: string;
-  sentTo?: string[]; // Array of email addresses sent to
-  sentRecipientCount?: number; // Number of recipients
-  monthGenerated?: string; // Month this newsletter is for
+  sentTo?: string[];
+  sentRecipientCount?: number;
+  monthGenerated?: string;
+  coverImageJobId?: string; // background job ID for initial auto-generation
 }
 
 export interface PipelineInput {

@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ key: string }> }
 ) {
   const { key } = await params;
-  const preview = store.getPreview(key);
+  const preview = await store.getPreview(key);
 
   if (!preview) {
     return new NextResponse("Preview not found", { status: 404 });
