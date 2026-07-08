@@ -4,18 +4,26 @@ export const DRAFT_SYSTEM_PROMPT = `You draft START Munich monthly community new
 
 export function buildDraftUserPrompt(params: {
   sourceText: string;
+  meetingTranscript: string;
   pdfTitles: string[];
   lumaContext: string;
   month: string;
   previousMonth: string;
 }): string {
-  const { sourceText, pdfTitles, lumaContext, month, previousMonth } = params;
+  const { sourceText, meetingTranscript, pdfTitles, lumaContext, month, previousMonth } = params;
 
   let prompt = `Generate the START Munich monthly newsletter for ${month}.
 
 === SOURCE TEXT (monthly recap) ===
-${sourceText}
+${sourceText || "(none provided)"}
 `;
+
+  if (meetingTranscript) {
+    prompt += `
+=== MEETING TRANSCRIPT ===
+${meetingTranscript}
+`;
+  }
 
   if (pdfTitles.length > 0) {
     prompt += `
@@ -31,7 +39,7 @@ ${lumaContext}
 
 === INSTRUCTIONS ===
 Create a newsletter with exactly 5 sections in this order:
-1. "Internal News" — Key updates from the source text/PDFs. Max 5 items. Text-only (no imageUrl, no url). Each item needs a title and summary.
+1. "Internal News" — Key updates from the source text/PDFs/meeting transcript. Max 5 items. Text-only (no imageUrl, no url). Each item needs a title and summary.
 2. "Upcoming Events - Internal" — From Luma internal calendar upcoming events.
 3. "Upcoming Events - External" — From Luma external calendar upcoming events.
 4. "Last Month Internal Events" — Internal events from ${previousMonth} (last month).
@@ -92,6 +100,8 @@ Please revise the newsletter according to the feedback above. Output the full re
 
 export const MEME_PROMPT_SYSTEM = `You generate creative, funny image prompts for a newsletter meme. The meme should be a simple, visually appealing illustration or cartoon related to the most notable internal news item. Keep it professional but humorous — think startup culture humor. The image should work at 1024x1024 pixels and be suitable for an email newsletter. Output only the image generation prompt text, nothing else.`;
 
+export const VISUAL_PROMPT_SYSTEM = `You generate image prompts for newsletter visuals. Each image should be a professional, visually appealing illustration or photograph (NOT infographics, charts, or diagrams). The images should relate to the internal news and work at 1024x1024 pixels, suitable for an email newsletter. Generate prompts for everyday scenes, people, objects, or abstract concepts — not data visualizations. Output only the image generation prompt text, nothing else.`;
+
 export function buildMemePromptUser(internalNewsItems: Array<{ title: string; summary: string }>): string {
   const topItem = internalNewsItems[0];
   if (!topItem) return "Create a generic startup community newsletter meme illustration.";
@@ -99,6 +109,25 @@ export function buildMemePromptUser(internalNewsItems: Array<{ title: string; su
   return `The most notable internal news this month is: "${topItem.title}" — ${topItem.summary}
 
 Generate a creative, funny image prompt for a meme illustration about this news. The style should be a clean, modern cartoon/illustration suitable for a professional community newsletter.`;
+}
+
+export function buildMultipleImagePrompts(
+  internalNewsItems: Array<{ title: string; summary: string }>
+): { meme: string; visual1: string; visual2: string } {
+  const topItem = internalNewsItems[0];
+  if (!topItem) {
+    return {
+      meme: "Create a generic startup community newsletter meme illustration.",
+      visual1: "Create a professional illustration of a diverse team collaborating and innovating.",
+      visual2: "Create an abstract professional image representing growth, community, and technology.",
+    };
+  }
+
+  return {
+    meme: `The most notable internal news this month is: "${topItem.title}" — ${topItem.summary}\n\nGenerate a creative, funny image prompt for a meme illustration about this news. The style should be a clean, modern cartoon/illustration suitable for a professional community newsletter.`,
+    visual1: `Based on the internal news "${topItem.title}", generate a professional visual showing: ${topItem.summary}\n\nCreate an inspiring, modern photograph or illustration (not a chart or infographic) that visually represents this topic. Think professional stock photo or artistic illustration style.`,
+    visual2: `The internal news "${topItem.title}" represents: ${topItem.summary}\n\nGenerate a creative, abstract professional visual that captures the essence or energy of this news. Use warm, professional colors and modern design. Avoid charts, diagrams, or infographics.`,
+  };
 }
 
 export const NEWSLETTER_JSON_SCHEMA = {
@@ -142,13 +171,25 @@ export const NEWSLETTER_JSON_SCHEMA = {
       type: "object" as const,
       properties: {
         enabled: { type: "boolean" as const },
-        imageUrl: { type: "string" as const },
-        imageAlt: { type: "string" as const },
-        prompt: { type: "string" as const },
-        imageBase64: { type: "string" as const },
+        images: {
+          type: "array" as const,
+          items: {
+            type: "object" as const,
+            properties: {
+              prompt: { type: "string" as const },
+              imageBase64: { type: "string" as const },
+              type: { 
+                type: "string" as const,
+                enum: ["meme", "normal"] as const,
+              },
+            },
+            required: ["prompt", "imageBase64", "type"],
+            additionalProperties: false,
+          },
+        },
         error: { type: "string" as const },
       },
-      required: ["enabled", "imageUrl", "imageAlt", "prompt", "imageBase64", "error"],
+      required: ["enabled", "images", "error"],
       additionalProperties: false,
     },
   },

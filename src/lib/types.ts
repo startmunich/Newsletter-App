@@ -12,12 +12,21 @@ export interface NewsletterSection {
   items: NewsletterItem[];
 }
 
+export interface GeneratedImage {
+  prompt: string;
+  imageBase64?: string;
+  type: "meme" | "normal";
+}
+
+export interface CoverImage {
+  prompt: string;
+  imageBase64: string;
+  index: number; // 0, 1, or 2
+}
+
 export interface InternalNewsMeme {
   enabled: boolean;
-  imageUrl?: string;
-  imageAlt?: string;
-  prompt?: string;
-  imageBase64?: string;
+  images?: GeneratedImage[];
   error?: string;
 }
 
@@ -31,6 +40,8 @@ export interface NewsletterDraft {
   clarificationQuestion: string;
   sections: NewsletterSection[];
   internalNewsMeme?: InternalNewsMeme;
+  coverImages?: CoverImage[]; // 3 generated cover images for user selection
+  selectedCoverImageIndex?: number; // 0, 1, or 2 - which image is selected
 }
 
 export interface GenerationStep {
@@ -62,11 +73,15 @@ export interface PreviewState {
   brevoCampaignId?: number;
   testEmailSentAt?: Date;
   testEmailTo?: string;
+  sentTo?: string[]; // Array of email addresses sent to
+  sentRecipientCount?: number; // Number of recipients
+  monthGenerated?: string; // Month this newsletter is for
 }
 
 export interface PipelineInput {
   jobId: string;
   sourceText: string;
+  meetingTranscript: string;
   pdfFiles: Array<{ buffer: Buffer; name: string }>;
   openAiApiKey: string;
   lumaExternalKey: string;

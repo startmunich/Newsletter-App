@@ -32,8 +32,10 @@ class Store {
     const step = job.steps.find((s) => s.name === stepName);
     if (step) {
       Object.assign(step, update);
+      console.log(`Store: Updated step "${stepName}" to status "${update.status}" - ${update.message || ""}`);
     } else {
       job.steps.push({ name: stepName, status: "pending", ...update });
+      console.log(`Store: Created step "${stepName}" with status "${update.status || "pending"}" - ${update.message || ""}`);
     }
   }
 
@@ -51,6 +53,28 @@ class Store {
     if (preview) {
       Object.assign(preview, update, { updatedAt: new Date() });
     }
+  }
+
+  getAllJobs(): JobState[] {
+    return Array.from(this.jobs.values()).sort((a, b) => {
+      const aId = parseInt(a.id.split("_")[1] || "0");
+      const bId = parseInt(b.id.split("_")[1] || "0");
+      return bId - aId; // Newest first
+    });
+  }
+
+  getActiveJobs(): JobState[] {
+    return Array.from(this.jobs.values())
+      .filter((job) => job.status === "pending" || job.status === "running")
+      .sort((a, b) => {
+        const aId = parseInt(a.id.split("_")[1] || "0");
+        const bId = parseInt(b.id.split("_")[1] || "0");
+        return bId - aId; // Newest first
+      });
+  }
+
+  getAllPreviews(): PreviewState[] {
+    return Array.from(this.previews.values()).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   }
 
   private cleanOldPreviews(): void {

@@ -35,31 +35,41 @@ function renderInternalNewsItem(item: NewsletterItem): string {
     </tr>`;
 }
 
-function renderEventItem(item: NewsletterItem): string {
-  const imageBlock = item.imageUrl
-    ? `<img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.imageAlt || item.title)}" width="560" style="width: 100%; max-width: 560px; height: auto; border-radius: 8px; display: block; margin-bottom: 12px;" />`
+function renderEventItem(item: NewsletterItem, isPastEvent: boolean = false): string {
+  let titleElement: string;
+
+  if (isPastEvent && item.url) {
+    // Past events: make title a clickable link to Luma
+    titleElement = `<a href="${escapeHtml(item.url)}" target="_blank" style="color: ${NAVY}; text-decoration: none; cursor: pointer;"><h3 style="margin: 0 0 6px 0; font-size: 17px; font-weight: 700; color: ${NAVY}; line-height: 1.3; text-decoration: underline;">${escapeHtml(item.title)}</h3></a>`;
+  } else {
+    // Upcoming events: just render the title normally
+    titleElement = `<h3 style="margin: 0 0 6px 0; font-size: 17px; font-weight: 700; color: ${NAVY}; line-height: 1.3;">${escapeHtml(item.title)}</h3>`;
+  }
+
+  const ctaButton = !isPastEvent && item.url
+    ? `<a href="${escapeHtml(item.url)}" target="_blank" style="display: inline-block; background-color: ${MAGENTA}; color: ${WHITE}; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 600; margin-top: 10px;">Register &rarr;</a>`
     : "";
 
-  const tagBadge = item.tag
-    ? `<span style="display: inline-block; background-color: ${MAGENTA}; color: ${WHITE}; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;">${escapeHtml(item.tag)}</span>`
-    : "";
+  const textCell = `
+    <td valign="top" style="padding-left: ${item.imageUrl ? "16px" : "0"};">
+      ${titleElement}
+      <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #444444;">${escapeHtml(item.summary)}</p>
+      ${ctaButton}
+    </td>`;
 
-  const ctaButton = item.url
-    ? `<a href="${escapeHtml(item.url)}" target="_blank" style="display: inline-block; background-color: ${MAGENTA}; color: ${WHITE}; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 600; margin-top: 12px;">Register &rarr;</a>`
+  const imageCell = item.imageUrl
+    ? `<td width="160" valign="top" style="padding-right: 0;">
+        <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.imageAlt || item.title)}" width="160" style="width: 160px; height: 160px; object-fit: cover; border-radius: 8px; display: block;" />
+      </td>`
     : "";
 
   return `
     <tr>
       <td style="padding: 20px 0; border-bottom: 1px solid ${BORDER_GRAY};">
-        ${imageBlock}
         <table cellpadding="0" cellspacing="0" border="0" width="100%">
           <tr>
-            <td>
-              ${tagBadge}
-              <h3 style="margin: 8px 0; font-size: 18px; font-weight: 600; color: ${NAVY};">${escapeHtml(item.title)}</h3>
-              <p style="margin: 0 0 8px 0; font-size: 14px; line-height: 1.5; color: #333333;">${escapeHtml(item.summary)}</p>
-              ${ctaButton}
-            </td>
+            ${imageCell}
+            ${textCell}
           </tr>
         </table>
       </td>
@@ -69,11 +79,18 @@ function renderEventItem(item: NewsletterItem): string {
 function renderSection(section: NewsletterSection): string {
   const normalizedTitle = normalizeSectionTitle(section.title);
   const isInternalNews = normalizedTitle === "Internal News";
+  const isPastEventSection = normalizedTitle.toLowerCase().includes("last month");
 
   if (section.items.length === 0) return "";
 
   const itemsHtml = section.items
-    .map((item) => (isInternalNews ? renderInternalNewsItem(item) : renderEventItem(item)))
+    .map((item) => {
+      if (isInternalNews) {
+        return renderInternalNewsItem(item);
+      } else {
+        return renderEventItem(item, isPastEventSection);
+      }
+    })
     .join("");
 
   return `
@@ -90,14 +107,37 @@ function renderSection(section: NewsletterSection): string {
 export function renderNewsletterHtml(draft: NewsletterDraft): string {
   const sectionsHtml = draft.sections.map(renderSection).join("");
 
-  const memeHtml =
-    draft.internalNewsMeme?.enabled && draft.internalNewsMeme.imageBase64
-      ? `
+  // Render selected cover image if available
+  const coverImageHtml =
+    draft.coverImages && draft.coverImages.length > 0 && draft.selectedCoverImageIndex !== undefined
+      ? (() => {
+          const selectedImage = draft.coverImages[draft.selectedCoverImageIndex];
+          if (selectedImage && selectedImage.imageBase64) {
+            return `
     <tr>
       <td style="padding: 24px 20px 0 20px; text-align: center;">
-        <img src="data:image/png;base64,${draft.internalNewsMeme.imageBase64}" alt="${escapeHtml(draft.internalNewsMeme.imageAlt || "Newsletter meme")}" width="400" style="max-width: 400px; width: 100%; height: auto; border-radius: 12px; margin: 0 auto;" />
+        <img src="data:image/png;base64,${selectedImage.imageBase64}" alt="Newsletter cover" width="560" style="max-width: 100%; width: 100%; height: auto; border-radius: 12px; margin: 0 auto;" />
       </td>
-    </tr>`
+    </tr>`;
+          }
+          return "";
+        })()
+      : "";
+
+  const imagesHtml =
+    draft.internalNewsMeme?.enabled && draft.internalNewsMeme.images && draft.internalNewsMeme.images.length > 0
+      ? draft.internalNewsMeme.images
+          .map((img) => {
+            if (!img.imageBase64) return "";
+            const imageType = img.type === "meme" ? "meme" : "image";
+            return `
+    <tr>
+      <td style="padding: 24px 20px 0 20px; text-align: center;">
+        <img src="data:image/png;base64,${img.imageBase64}" alt="Newsletter ${imageType}" width="400" style="max-width: 400px; width: 100%; height: auto; border-radius: 12px; margin: 0 auto;" />
+      </td>
+    </tr>`;
+          })
+          .join("")
       : "";
 
   return `<!DOCTYPE html>
@@ -143,8 +183,11 @@ export function renderNewsletterHtml(draft: NewsletterDraft): string {
             </td>
           </tr>
 
-          <!-- Meme (before Internal News) -->
-          ${memeHtml}
+          <!-- Cover Image -->
+          ${coverImageHtml}
+
+          <!-- Images -->
+          ${imagesHtml}
 
           <!-- Sections -->
           ${sectionsHtml}
@@ -153,6 +196,7 @@ export function renderNewsletterHtml(draft: NewsletterDraft): string {
           <tr>
             <td style="padding: 40px 20px 32px 20px; text-align: center; border-top: 1px solid ${BORDER_GRAY}; margin-top: 32px;">
               <p style="margin: 0 0 8px 0; font-size: 13px; color: #666666;">&copy; ${new Date().getFullYear()} START Munich. All rights reserved.</p>
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: #999999;">Automatically generated, approved by human. May contain mistakes.</p>
               <p style="margin: 0; font-size: 12px; color: #999999;">
                 You&rsquo;re receiving this because you&rsquo;re part of the START Munich community.<br/>
                 <a href="{{unsubscribe}}" style="color: ${MAGENTA}; text-decoration: underline;">Unsubscribe</a>

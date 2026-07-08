@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 export function InputForm() {
   const router = useRouter();
   const [text, setText] = useState("");
+  const [meetingTranscript, setMeetingTranscript] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -14,8 +15,9 @@ export function InputForm() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!text.trim()) {
-      setError("Please enter some newsletter source text");
+    // Make both text fields optional, but at least one should have content
+    if (!text.trim() && !meetingTranscript.trim()) {
+      setError("Please enter either newsletter source text or a meeting transcript");
       return;
     }
 
@@ -25,6 +27,7 @@ export function InputForm() {
     try {
       const formData = new FormData();
       formData.append("sourceText", text);
+      formData.append("meetingTranscript", meetingTranscript);
       for (const file of files) {
         formData.append("files", file);
       }
@@ -84,84 +87,104 @@ export function InputForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <div className="bg-red-900/30 border border-red-700/50 text-red-300 px-4 py-3 rounded-xl text-sm">
           {error}
         </div>
       )}
 
-      <div>
-        <label
-          htmlFor="sourceText"
-          className="block text-sm font-medium text-gray-700 mb-2"
-        >
-          Newsletter source text
-        </label>
-        <textarea
-          id="sourceText"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Paste the monthly recap text here — board updates, program news, partnerships, metrics, team changes..."
-          rows={12}
-          className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-magenta/50 focus:border-magenta resize-y"
-          disabled={isLoading}
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          PDF attachments (optional)
-        </label>
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-            isDragOver
-              ? "border-magenta bg-magenta/5"
-              : "border-gray-300 hover:border-gray-400"
-          }`}
-        >
-          <p className="text-sm text-gray-500">
-            Drop PDF files here or click to browse
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/pdf"
-            multiple
-            onChange={handleFileInput}
-            className="hidden"
+      <div className="bg-[#111124] border border-[#2a2a42] rounded-2xl p-6 space-y-5">
+        <div>
+          <label
+            htmlFor="sourceText"
+            className="block text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider mb-2"
+          >
+            Newsletter source text <span className="normal-case font-normal text-[#5c5c7a]">(optional)</span>
+          </label>
+          <textarea
+            id="sourceText"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Paste the monthly recap text here — board updates, program news, partnerships, metrics, team changes..."
+            rows={8}
+            className="w-full rounded-xl border border-[#2a2a42] bg-[#0a0a14] px-4 py-3 text-sm text-[#f1f1f5] placeholder-[#3a3a57] focus:outline-none focus:ring-2 focus:ring-magenta/40 focus:border-magenta/60 resize-y transition-colors"
+            disabled={isLoading}
           />
         </div>
 
-        {files.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {files.map((file, i) => (
-              <div
-                key={`${file.name}-${i}`}
-                className="flex items-center justify-between bg-gray-100 rounded-lg px-3 py-2"
-              >
-                <span className="text-sm text-gray-700 truncate">
-                  📄 {file.name}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeFile(i)}
-                  className="text-gray-400 hover:text-red-500 ml-2"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+        <div>
+          <label
+            htmlFor="meetingTranscript"
+            className="block text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider mb-2"
+          >
+            Meeting transcript <span className="normal-case font-normal text-[#5c5c7a]">(optional)</span>
+          </label>
+          <textarea
+            id="meetingTranscript"
+            value={meetingTranscript}
+            onChange={(e) => setMeetingTranscript(e.target.value)}
+            placeholder="Paste a transcript from a recorded meeting to include relevant discussions and updates..."
+            rows={8}
+            className="w-full rounded-xl border border-[#2a2a42] bg-[#0a0a14] px-4 py-3 text-sm text-[#f1f1f5] placeholder-[#3a3a57] focus:outline-none focus:ring-2 focus:ring-magenta/40 focus:border-magenta/60 resize-y transition-colors"
+            disabled={isLoading}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider mb-2">
+            PDF attachments <span className="normal-case font-normal text-[#5c5c7a]">(optional)</span>
+          </label>
+          <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+              isDragOver
+                ? "border-magenta/60 bg-magenta/5"
+                : "border-[#2a2a42] hover:border-[#3a3a57]"
+            }`}
+          >
+            <p className="text-sm text-[#5c5c7a]">
+              Drop PDF files here or click to browse
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf"
+              multiple
+              onChange={handleFileInput}
+              className="hidden"
+            />
           </div>
-        )}
+
+          {files.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {files.map((file, i) => (
+                <div
+                  key={`${file.name}-${i}`}
+                  className="flex items-center justify-between bg-[#1a1a2e] border border-[#2a2a42] rounded-lg px-3 py-2"
+                >
+                  <span className="text-sm text-[#a0a0b8] truncate">
+                    📄 {file.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(i)}
+                    className="text-[#5c5c7a] hover:text-red-400 ml-2 transition-colors"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <button
         type="submit"
-        disabled={isLoading || !text.trim()}
-        className="w-full py-3 px-6 bg-magenta text-white font-semibold rounded-lg hover:bg-magenta-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={isLoading || (!text.trim() && !meetingTranscript.trim())}
+        className="w-full py-3 px-6 bg-magenta text-white font-semibold rounded-xl hover:bg-magenta-light transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {isLoading ? "Starting generation..." : "Generate Newsletter"}
       </button>

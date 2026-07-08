@@ -11,26 +11,26 @@ function StepIcon({ stepStatus }: { stepStatus: string }) {
   switch (stepStatus) {
     case "done":
       return (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-white text-xs">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 text-xs">
           ✓
         </span>
       );
     case "running":
       return (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-magenta">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-magenta/60">
           <span className="h-3 w-3 rounded-full bg-magenta animate-pulse" />
         </span>
       );
     case "error":
       return (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white text-xs">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500/20 border border-red-500/50 text-red-400 text-xs">
           ✕
         </span>
       );
     default:
       return (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-gray-300">
-          <span className="h-2 w-2 rounded-full bg-gray-300" />
+        <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#2a2a42]">
+          <span className="h-2 w-2 rounded-full bg-[#2a2a42]" />
         </span>
       );
   }
@@ -38,7 +38,7 @@ function StepIcon({ stepStatus }: { stepStatus: string }) {
 
 export function GenerationProgress({ steps, status }: Props) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+    <div className="bg-[#111124] rounded-2xl border border-[#2a2a42] p-6">
       <div className="space-y-4">
         {steps.map((step) => (
           <div key={step.name} className="flex items-start gap-3">
@@ -47,18 +47,18 @@ export function GenerationProgress({ steps, status }: Props) {
               <p
                 className={`text-sm font-medium ${
                   step.status === "running"
-                    ? "text-navy"
+                    ? "text-[#f1f1f5]"
                     : step.status === "done"
-                      ? "text-gray-600"
+                      ? "text-[#a0a0b8]"
                       : step.status === "error"
-                        ? "text-red-600"
-                        : "text-gray-400"
+                        ? "text-red-400"
+                        : "text-[#3a3a57]"
                 }`}
               >
                 {step.name}
               </p>
               {step.message && (
-                <p className="text-xs text-gray-500 mt-0.5">{step.message}</p>
+                <p className="text-xs text-[#5c5c7a] mt-0.5">{step.message}</p>
               )}
             </div>
           </div>
@@ -66,8 +66,8 @@ export function GenerationProgress({ steps, status }: Props) {
       </div>
 
       {status === "running" && (
-        <div className="mt-6 pt-4 border-t border-gray-100">
-          <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
+        <div className="mt-6 pt-4 border-t border-[#1f1f36]">
+          <div className="h-1 bg-[#1a1a2e] rounded-full overflow-hidden">
             <div className="h-full bg-magenta rounded-full animate-pulse w-2/3" />
           </div>
         </div>

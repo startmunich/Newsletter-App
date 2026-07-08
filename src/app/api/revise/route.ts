@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
       updatedAt: new Date(),
       status: "reviewing",
+      monthGenerated: preview.monthGenerated,
     };
 
     store.storePreview(newKey, newPreview);

@@ -50,41 +50,43 @@ export function NewsletterEditor({ draft, onUpdate }: Props) {
     onUpdate(localDraft);
   };
 
+  const inputClass = "w-full rounded-lg border border-[#2a2a42] bg-[#0a0a14] px-3 py-2 text-sm text-[#f1f1f5] placeholder-[#3a3a57] focus:outline-none focus:ring-1 focus:ring-magenta/40 focus:border-magenta/60 transition-colors";
+
   return (
     <div className="space-y-4">
       {/* Subject & Preheader */}
-      <div className="space-y-3">
+      <div className="bg-[#111124] border border-[#2a2a42] rounded-2xl p-4 space-y-3">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">
+          <label className="block text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider mb-1.5">
             Subject line
           </label>
           <input
             type="text"
             value={localDraft.subject}
             onChange={(e) => updateField("subject", e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-magenta"
+            className={inputClass}
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">
+          <label className="block text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider mb-1.5">
             Preheader
           </label>
           <input
             type="text"
             value={localDraft.preheader}
             onChange={(e) => updateField("preheader", e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-magenta"
+            className={inputClass}
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">
+          <label className="block text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider mb-1.5">
             Intro
           </label>
           <textarea
             value={localDraft.intro}
             onChange={(e) => updateField("intro", e.target.value)}
             rows={3}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-magenta resize-y"
+            className={`${inputClass} resize-y`}
           />
         </div>
       </div>
@@ -94,28 +96,28 @@ export function NewsletterEditor({ draft, onUpdate }: Props) {
         {localDraft.sections.map((section, sIdx) => (
           <div
             key={sIdx}
-            className="border border-gray-200 rounded-lg overflow-hidden"
+            className="border border-[#2a2a42] rounded-xl overflow-hidden"
           >
             <button
               type="button"
               onClick={() => toggleSection(sIdx)}
-              className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors"
+              className="w-full text-left px-4 py-3 bg-[#111124] hover:bg-[#1a1a2e] flex items-center justify-between transition-colors"
             >
-              <span className="text-sm font-medium text-navy">
+              <span className="text-sm font-medium text-[#f1f1f5]">
                 {section.title}
               </span>
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-[#5c5c7a]">
                 {section.items.length} item{section.items.length !== 1 ? "s" : ""}{" "}
                 {expandedSections.has(sIdx) ? "▾" : "▸"}
               </span>
             </button>
 
             {expandedSections.has(sIdx) && (
-              <div className="p-3 space-y-3 border-t border-gray-200">
+              <div className="p-3 space-y-3 border-t border-[#2a2a42] bg-[#0d0d1e]">
                 {section.items.map((item, iIdx) => (
                   <div
                     key={iIdx}
-                    className="bg-white border border-gray-100 rounded-lg p-3 space-y-2"
+                    className="bg-[#111124] border border-[#2a2a42] rounded-xl p-3 space-y-2"
                   >
                     <input
                       type="text"
@@ -124,7 +126,7 @@ export function NewsletterEditor({ draft, onUpdate }: Props) {
                         updateItem(sIdx, iIdx, "title", e.target.value)
                       }
                       placeholder="Item title"
-                      className="w-full rounded border border-gray-200 px-2 py-1.5 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-magenta"
+                      className={`${inputClass} font-medium`}
                     />
                     <textarea
                       value={item.summary}
@@ -133,7 +135,7 @@ export function NewsletterEditor({ draft, onUpdate }: Props) {
                       }
                       placeholder="Summary"
                       rows={2}
-                      className="w-full rounded border border-gray-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-magenta resize-y"
+                      className={`${inputClass} resize-y`}
                     />
                     {item.url && (
                       <input
@@ -143,7 +145,7 @@ export function NewsletterEditor({ draft, onUpdate }: Props) {
                           updateItem(sIdx, iIdx, "url", e.target.value)
                         }
                         placeholder="URL"
-                        className="w-full rounded border border-gray-200 px-2 py-1.5 text-xs text-gray-500 focus:outline-none focus:ring-1 focus:ring-magenta"
+                        className={`${inputClass} text-xs text-[#5c5c7a]`}
                       />
                     )}
                   </div>
@@ -157,7 +159,7 @@ export function NewsletterEditor({ draft, onUpdate }: Props) {
       <button
         type="button"
         onClick={handleReRender}
-        className="w-full py-2.5 px-4 bg-navy text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
+        className="w-full py-2.5 px-4 bg-navy border border-[#2a2a42] text-[#f1f1f5] text-sm font-medium rounded-xl hover:bg-[#111124] hover:border-[#3a3a57] transition-colors"
       >
         Re-render preview
       </button>

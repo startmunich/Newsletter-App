@@ -10,10 +10,13 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const sourceText = formData.get("sourceText");
+    const meetingTranscript = formData.get("meetingTranscript");
 
-    if (!sourceText || typeof sourceText !== "string" || sourceText.trim().length === 0) {
+    // Make both optional, but require at least one
+    if ((!sourceText || typeof sourceText !== "string" || sourceText.trim().length === 0) &&
+        (!meetingTranscript || typeof meetingTranscript !== "string" || meetingTranscript.trim().length === 0)) {
       return NextResponse.json(
-        { error: "sourceText is required" },
+        { error: "Either sourceText or meetingTranscript is required" },
         { status: 400 }
       );
     }
@@ -49,7 +52,8 @@ export async function POST(request: NextRequest) {
 
     const input: PipelineInput = {
       jobId,
-      sourceText: sourceText.trim(),
+      sourceText: sourceText ? (sourceText as string).trim() : "",
+      meetingTranscript: meetingTranscript ? (meetingTranscript as string).trim() : "",
       pdfFiles,
       openAiApiKey,
       lumaExternalKey,
@@ -59,10 +63,11 @@ export async function POST(request: NextRequest) {
     };
 
     runPipeline(jobId, input).catch((err) => {
-      console.error("Pipeline fatal error:", err);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("Pipeline fatal error:", errorMsg, "\nStack:", err instanceof Error ? err.stack : "");
       store.updateJob(jobId, {
         status: "error",
-        error: err instanceof Error ? err.message : "Unknown error",
+        error: errorMsg,
       });
     });
 
