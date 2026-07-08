@@ -3,6 +3,42 @@ import { NextRequest, NextResponse } from "next/server";
 import { NewsletterDraft } from "@/lib/types";
 import { renderNewsletterHtml, renderNewsletterText } from "@/lib/renderer";
 
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ key: string }> }
+) {
+  const { key } = await params;
+  const preview = await store.getPreview(key);
+
+  if (!preview) {
+    return NextResponse.json({ error: "Preview not found" }, { status: 404 });
+  }
+
+  await store.deletePreview(key);
+  return NextResponse.json({ success: true });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ key: string }> }
+) {
+  const { key } = await params;
+  const preview = await store.getPreview(key);
+
+  if (!preview) {
+    return NextResponse.json({ error: "Preview not found" }, { status: 404 });
+  }
+
+  const { name } = await request.json() as { name?: string };
+
+  if (typeof name !== "string" || !name.trim()) {
+    return NextResponse.json({ error: "name is required" }, { status: 400 });
+  }
+
+  await store.updatePreview(key, { name: name.trim() });
+  return NextResponse.json({ success: true });
+}
+
 export const dynamic = "force-dynamic";
 
 export async function GET(

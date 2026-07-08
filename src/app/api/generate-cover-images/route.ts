@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { store } from "@/lib/store";
-import { generateCoverImages, buildDefaultCoverPrompt } from "@/lib/openai-client";
+import {
+  generateCoverImages,
+  buildDefaultCoverPrompt,
+  generateCoverPromptFromDraftData,
+} from "@/lib/openai-client";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -18,13 +22,33 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Preview not found" }, { status: 404 });
   }
 
-  const defaultPrompt = buildDefaultCoverPrompt({
+  const openAiApiKey = process.env.OPENAI_API_KEY;
+
+  try {
+    if (openAiApiKey) {
+      const aiPrompt = await generateCoverPromptFromDraftData(
+        {
+          month: preview.structured.month || preview.monthGenerated || "",
+          subject: preview.structured.subject || "",
+          intro: preview.structured.intro || "",
+          sections: preview.structured.sections || [],
+        },
+        openAiApiKey
+      );
+      return NextResponse.json({ defaultPrompt: aiPrompt });
+    }
+  } catch (error) {
+    console.error("GET cover prompt AI generation failed, falling back:", error);
+  }
+
+  const fallbackPrompt = buildDefaultCoverPrompt({
     month: preview.structured.month || preview.monthGenerated || "",
     subject: preview.structured.subject || "",
     intro: preview.structured.intro || "",
-  });
+    internalNewsItems: [],
+  })[0];
 
-  return NextResponse.json({ defaultPrompt });
+  return NextResponse.json({ defaultPrompt: fallbackPrompt });
 }
 
 // POST: start a background cover image generation job, return jobId immediately
@@ -47,17 +71,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Preview not found" }, { status: 404 });
     }
 
-    const effectivePrompt =
+    const effectivePrompt: string[] =
       typeof prompt === "string" && prompt.trim().length > 0
-        ? prompt.trim()
-        : buildDefaultCoverPrompt({
-            month: preview.structured.month || preview.monthGenerated || "",
-            subject: preview.structured.subject || "",
-            intro: preview.structured.intro || "",
-          });
-
-    const jobId = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    store.createCoverImageJob(jobId, previewKey, effectivePrompt);
+        ? [prompt.trim()]
+          : await generateCoverPromptFromDraftData(
+              {
+                month: preview.structured.month || preview.monthGenerated || "",
+                subject: preview.structured.subject || "",
+                intro: preview.structured.intro || "",
+                sections: preview.structured.sections || [],
+              },
+              openAiApiKey
+            );
     store.updateCoverImageJob(jobId, { status: "running" });
 
     // Fire and forget: generate images in the background, storing progress on the job

@@ -78,6 +78,7 @@ export interface PreviewState {
   createdAt: Date;
   updatedAt: Date;
   status: "reviewing" | "sent";
+  name?: string; // custom display name (editable by user)
   sentAt?: Date;
   brevoCampaignId?: number;
   testEmailSentAt?: Date;

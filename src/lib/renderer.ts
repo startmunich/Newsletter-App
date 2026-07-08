@@ -116,7 +116,7 @@ export function renderNewsletterHtml(draft: NewsletterDraft): string {
             return `
     <tr>
       <td style="padding: 24px 20px 0 20px; text-align: center;">
-        <img src="data:image/png;base64,${selectedImage.imageBase64}" alt="Newsletter cover" width="560" style="max-width: 100%; width: 100%; height: auto; border-radius: 12px; margin: 0 auto;" />
+        <img src="data:image/png;base64,${selectedImage.imageBase64}" alt="Newsletter cover" width="280" style="max-width: 280px; width: 50%; height: auto; border-radius: 12px; margin: 0 auto; display: block;" />
       </td>
     </tr>`;
           }

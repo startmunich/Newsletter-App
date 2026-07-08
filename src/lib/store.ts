@@ -1,5 +1,5 @@
 import { JobState, GenerationStep, PreviewState, CoverImageJob, CoverImage } from "./types";
-import { nocoGetAll, nocoCreate, nocoUpdate } from "./nocodb";
+import { nocoGetAll, nocoCreate, nocoUpdate, nocoDelete } from "./nocodb";
 
 class Store {
   private jobs: Map<string, JobState> = new Map();
@@ -109,6 +109,20 @@ class Store {
       );
   }
 
+  async deletePreview(key: string): Promise<void> {
+    await this.ensureCache();
+    const entry = this.previewCache.get(key);
+    if (!entry) return;
+
+    this.previewCache.delete(key);
+
+    if (entry.rowId) {
+      nocoDelete(entry.rowId).catch((err) =>
+        console.error("Store: NocoDB delete error:", err)
+      );
+    }
+  }
+
   getAllJobs(): JobState[] {
     return Array.from(this.jobs.values()).sort((a, b) => {
       const aId = parseInt(a.id.split("_")[1] || "0");
@@ -167,7 +181,11 @@ class Store {
 const globalWithStore = global as typeof globalThis & { __store?: Store };
 // Recreate the store if it's missing or was created before newer methods were added
 // (prevents stale singletons during dev hot-reloads).
-if (!globalWithStore.__store || typeof globalWithStore.__store.createCoverImageJob !== "function") {
+if (
+  !globalWithStore.__store ||
+  typeof globalWithStore.__store.createCoverImageJob !== "function" ||
+  typeof globalWithStore.__store.deletePreview !== "function"
+) {
   globalWithStore.__store = new Store();
 }
 

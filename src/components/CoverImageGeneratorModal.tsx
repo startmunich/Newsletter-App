@@ -154,9 +154,7 @@ export default function CoverImageGeneratorModal({
               className="w-full px-4 py-3 bg-[#2a2a42] border border-[#3a3a52] rounded-lg text-[#f1f1f5] placeholder-[#606078] focus:outline-none focus:border-[#D0006F] mb-2 resize-y"
             />
             <p className="text-xs text-[#606078] mb-6">
-              3 images will be generated from this prompt. Generation runs in the background — you
-              can watch them appear below.
-            </p>
+                3 images will be generated: Meme, Photo, and Creative. Generation runs in the background.
 
             <div className="flex gap-4">
               <button

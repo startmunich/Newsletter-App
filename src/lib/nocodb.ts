@@ -42,9 +42,10 @@ function serializeForStorage(preview: PreviewState): string {
     );
   }
 
-  // Also strip from html/text (they may contain embedded base64 img tags)
-  // Keep structured data but strip rendered html if it contains images
-  // Actually keep html as-is — NocoDB can handle text fields
+  // Strip base64 data URIs from rendered HTML (they can be millions of chars)
+  if (copy.html) {
+    copy.html = copy.html.replace(/src="data:[^"]{100,}"/g, 'src=""');
+  }
 
   return JSON.stringify(copy);
 }
@@ -107,5 +108,12 @@ export async function nocoUpdate(rowId: number, preview: PreviewState): Promise<
       Id: rowId,
       JSON: serializeForStorage(preview),
     }),
+  });
+}
+
+export async function nocoDelete(rowId: number): Promise<void> {
+  await nocoFetch("/records", {
+    method: "DELETE",
+    body: JSON.stringify({ Id: rowId }),
   });
 }

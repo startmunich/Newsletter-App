@@ -154,17 +154,19 @@ export default function NewsletterDetailPage() {
       const response = await fetch("/api/send-test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ previewKey: key, testEmail }),
+        body: JSON.stringify({ key, email: testEmail.trim() }),
       });
+
+      const data = await response.json().catch(() => null);
       if (response.ok) {
         alert("Test email sent successfully!");
         setShowEmailModal(false);
         setTestEmail("");
       } else {
-        alert("Failed to send test email");
+        alert(data?.error || "Failed to send test email");
       }
-    } catch {
-      alert("Error sending test email");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Error sending test email");
     } finally {
       setSending(false);
     }
@@ -176,18 +178,20 @@ export default function NewsletterDetailPage() {
       const response = await fetch("/api/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ previewKey: key }),
+        body: JSON.stringify({ key }),
       });
+
+      const data = await response.json().catch(() => null);
       if (response.ok) {
         alert("Newsletter sent successfully!");
         setShowEmailModal(false);
         const r = await fetch(`/api/preview-data/${key}`);
         if (r.ok) setPreview(await r.json());
       } else {
-        alert("Failed to send newsletter");
+        alert(data?.error || "Failed to send newsletter");
       }
-    } catch {
-      alert("Error sending newsletter");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Error sending newsletter");
     } finally {
       setSending(false);
     }
@@ -284,7 +288,7 @@ export default function NewsletterDetailPage() {
                     {isGenerating && (
                       <p className="text-[#a0a0b8] text-xs mt-1 flex items-center gap-2">
                         <span className="inline-block w-3 h-3 rounded-full border-2 border-[#D0006F] border-t-transparent animate-spin" />
-                        Generating in background… ({coverImages.length}/3 ready)
+                        Generating in background... ({coverImages.length}/3 ready)
                       </p>
                     )}
                     {coverJobStatus === "done" && coverImages.length > 0 && (
@@ -336,47 +340,50 @@ export default function NewsletterDetailPage() {
                 <div className="grid grid-cols-3 gap-4">
                   {coverImages.map((image) => {
                     const isSelected = selectedIndex === image.index;
+                    const typeLabel = image.index === 0 ? "Meme" : image.index === 1 ? "Photo" : "Creative";
                     return (
-                      <button
-                        key={image.index}
-                        onClick={() => handleCoverImageSelected(image)}
-                        className={`relative rounded-lg overflow-hidden border-2 transition-all ${
-                          isSelected ? "border-[#D0006F] ring-2 ring-[#D0006F]/30" : "border-[#2a2a42] hover:border-[#4a4a62]"
-                        }`}
-                      >
-                        <img
-                          src={`data:image/png;base64,${image.imageBase64}`}
-                          alt={`Cover option ${image.index + 1}`}
-                          className="w-full aspect-square object-cover"
-                        />
-                        {isSelected && (
-                          <span className="absolute top-2 right-2 bg-[#D0006F] text-white text-xs font-semibold px-2 py-0.5 rounded">
-                            ✓
-                          </span>
-                        )}
-                      </button>
+                      <div key={image.index} className="flex flex-col gap-1">
+                        <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">{typeLabel}</span>
+                        <button
+                          onClick={() => handleCoverImageSelected(image)}
+                          className={`relative rounded-lg overflow-hidden border-2 transition-all ${
+                            isSelected ? "border-[#D0006F] ring-2 ring-[#D0006F]/30" : "border-[#2a2a42] hover:border-[#4a4a62]"
+                          }`}
+                        >
+                          <img
+                            src={`data:image/png;base64,${image.imageBase64}`}
+                            alt={`Cover option ${typeLabel}`}
+                            className="w-full aspect-square object-cover"
+                          />
+                          {isSelected && (
+                            <span className="absolute top-2 right-2 bg-[#D0006F] text-white text-xs font-semibold px-2 py-0.5 rounded">
+                              ✓
+                            </span>
+                          )}
+                        </button>
+                      </div>
                     );
                   })}
 
                   {/* Skeleton placeholders while generating */}
                   {isGenerating &&
-                    Array.from({ length: Math.max(0, 3 - coverImages.length) }).map((_, i) => (
-                      <div
-                        key={`skeleton-${i}`}
-                        className="w-full aspect-square rounded-lg bg-[#2a2a42] animate-pulse flex items-center justify-center"
-                      >
-                        <span className="text-[#3a3a52] text-xs">Generating…</span>
+                    ["Meme", "Photo", "Creative"].slice(coverImages.length).map((label, i) => (
+                      <div key={`skeleton-${i}`} className="flex flex-col gap-1">
+                        <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">{label}</span>
+                        <div className="w-full aspect-square rounded-lg bg-[#2a2a42] animate-pulse flex items-center justify-center">
+                          <span className="text-[#3a3a52] text-xs">Generating…</span>
+                        </div>
                       </div>
                     ))}
 
                   {/* Empty state: never generated */}
                   {coverJobStatus === "idle" && coverImages.length === 0 &&
-                    Array.from({ length: 3 }).map((_, i) => (
-                      <div
-                        key={`empty-${i}`}
-                        className="w-full aspect-square rounded-lg border-2 border-dashed border-[#2a2a42] flex items-center justify-center"
-                      >
-                        <span className="text-[#3a3a52] text-xs">No image</span>
+                    ["Meme", "Photo", "Creative"].map((label, i) => (
+                      <div key={`empty-${i}`} className="flex flex-col gap-1">
+                        <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">{label}</span>
+                        <div className="w-full aspect-square rounded-lg border-2 border-dashed border-[#2a2a42] flex items-center justify-center">
+                          <span className="text-[#3a3a52] text-xs">No image</span>
+                        </div>
                       </div>
                     ))}
                 </div>

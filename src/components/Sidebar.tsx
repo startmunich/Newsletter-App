@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PreviewState, JobState } from "@/lib/types";
 
 interface SidebarProps {
@@ -9,9 +10,14 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeKey }: SidebarProps) {
+  const router = useRouter();
   const [previews, setPreviews] = useState<PreviewState[]>([]);
   const [activeJobs, setActiveJobs] = useState<JobState[]>([]);
   const [loading, setLoading] = useState(true);
+  const [renamingKey, setRenamingKey] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -43,6 +49,36 @@ export function Sidebar({ activeKey }: SidebarProps) {
     const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  const startRename = (preview: PreviewState) => {
+    setRenamingKey(preview.key);
+    setRenameValue(preview.name || preview.monthGenerated || "");
+    setTimeout(() => renameInputRef.current?.select(), 0);
+  };
+
+  const commitRename = async (key: string) => {
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      setRenamingKey(null);
+      return;
+    }
+    setPreviews((prev) =>
+      prev.map((p) => (p.key === key ? { ...p, name: trimmed } : p))
+    );
+    setRenamingKey(null);
+    await fetch(`/api/preview-data/${key}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+  };
+
+  const handleDelete = async (key: string) => {
+    setPreviews((prev) => prev.filter((p) => p.key !== key));
+    setDeletingKey(null);
+    await fetch(`/api/preview-data/${key}`, { method: "DELETE" });
+    if (activeKey === key) router.push("/");
+  };
 
   return (
     <aside className="w-64 bg-[#1a1a2e] border-r border-[#2a2a42] h-screen overflow-y-auto">
@@ -113,26 +149,93 @@ export function Sidebar({ activeKey }: SidebarProps) {
           ) : previews.length === 0 ? (
             <p className="text-xs text-[#606078] italic">No newsletters yet</p>
           ) : (
-            <div className="space-y-2">
-              {previews.map((preview) => (
-                <Link
-                  key={preview.key}
-                  href={`/newsletter/${preview.key}`}
-                  className={`block px-4 py-3 rounded-lg text-sm transition-colors ${
-                    activeKey === preview.key
-                      ? "bg-magenta/20 border border-magenta text-magenta"
-                      : "text-[#a0a0b8] hover:bg-[#2a2a42] hover:text-[#f1f1f5]"
-                  }`}
-                >
-                  <div className="font-medium truncate">{preview.monthGenerated || "Untitled"}</div>
-                  <div className="text-xs text-[#606078] mt-1">
-                    {preview.status === "sent" ? "✓ Sent" : "◦ Draft"}
+            <div className="space-y-1">
+              {previews.map((preview) => {
+                const isActive = activeKey === preview.key;
+                const isRenaming = renamingKey === preview.key;
+                const isDeleting = deletingKey === preview.key;
+                const displayName = preview.name || preview.monthGenerated || "Untitled";
+
+                return (
+                  <div
+                    key={preview.key}
+                    className={`group relative rounded-lg text-sm transition-colors ${
+                      isActive
+                        ? "bg-magenta/20 border border-magenta"
+                        : "border border-transparent hover:bg-[#2a2a42]"
+                    }`}
+                  >
+                    {isDeleting ? (
+                      <div className="px-3 py-2">
+                        <p className="text-xs text-[#f1f1f5] mb-2">Delete &ldquo;{displayName}&rdquo;?</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleDelete(preview.key)}
+                            className="flex-1 px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={() => setDeletingKey(null)}
+                            className="flex-1 px-2 py-1 bg-[#3a3a52] text-[#f1f1f5] text-xs rounded hover:bg-[#4a4a62] transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : isRenaming ? (
+                      <div className="px-3 py-2">
+                        <input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRename(preview.key);
+                            if (e.key === "Escape") setRenamingKey(null);
+                          }}
+                          onBlur={() => commitRename(preview.key)}
+                          className="w-full px-2 py-1 bg-[#2a2a42] border border-[#D0006F] rounded text-[#f1f1f5] text-xs focus:outline-none"
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <Link
+                        href={`/newsletter/${preview.key}`}
+                        className={`block px-3 py-2 pr-16 ${isActive ? "text-magenta" : "text-[#a0a0b8] hover:text-[#f1f1f5]"}`}
+                      >
+                        <div className="font-medium truncate">{displayName}</div>
+                        <div className="text-xs text-[#606078] mt-0.5">
+                          {preview.status === "sent" ? "✓ Sent" : "◦ Draft"} · {new Date(preview.updatedAt).toLocaleDateString()}
+                        </div>
+                      </Link>
+                    )}
+
+                    {/* Action buttons — visible on hover (when not in rename/delete mode) */}
+                    {!isRenaming && !isDeleting && (
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex gap-0.5">
+                        <button
+                          onClick={(e) => { e.preventDefault(); startRename(preview); }}
+                          title="Rename"
+                          className="p-1.5 rounded text-[#606078] hover:text-[#f1f1f5] hover:bg-[#3a3a52] transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => { e.preventDefault(); setDeletingKey(preview.key); }}
+                          title="Delete"
+                          className="p-1.5 rounded text-[#606078] hover:text-red-400 hover:bg-[#3a3a52] transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                          </svg>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xs text-[#606078] mt-1">
-                    {new Date(preview.updatedAt).toLocaleDateString()}
-                  </div>
-                </Link>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -51,8 +51,8 @@ export default function ReviewPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          previewKey,
-          refinementPrompt,
+          key: previewKey,
+          feedback: refinementPrompt,
         }),
       });
 

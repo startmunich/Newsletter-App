@@ -264,9 +264,8 @@ export async function generateMemeImage(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-image-1",
+        model: "dall-e-3",
         prompt,
-        n: 1,
         size: "1024x1024",
       }),
       signal: controller.signal,
@@ -286,12 +285,25 @@ export async function generateMemeImage(
     const data = await response.json();
     console.log("generateMemeImage: API response received");
     
-    // gpt-image-1 returns b64_json directly
-    const imageBase64 = data.data?.[0]?.b64_json;
-    if (!imageBase64) {
+    const firstImage = data.data?.[0];
+    if (!firstImage) {
       console.error("generateMemeImage: No image data in response");
       return null;
     }
+
+    if (typeof firstImage.b64_json === "string" && firstImage.b64_json.length > 0) {
+      return firstImage.b64_json;
+    }
+
+    // Some models return image URLs instead of inline base64 data.
+    const imageUrl = firstImage.url;
+    if (!imageUrl) {
+      console.error("generateMemeImage: No image URL or b64_json in response");
+      return null;
+    }
+    const imgRes = await fetch(imageUrl);
+    const imgBuffer = await imgRes.arrayBuffer();
+    const imageBase64 = Buffer.from(imgBuffer).toString("base64");
 
     console.log(`generateMemeImage: Image generated successfully, base64 length: ${imageBase64.length}`);
     return imageBase64;
@@ -348,34 +360,109 @@ export function buildDefaultCoverPrompt(context: {
   month: string;
   subject: string;
   intro: string;
-}): string {
-  return `Professional tech newsletter cover illustration for START Munich (${context.month}). Modern, clean and vibrant design suitable for an email header. Theme: startups, innovation, technology and community. Abstract geometric shapes with subtle tech motifs. No text in the image.`;
+  internalNewsItems?: Array<{ title: string; summary: string }>;
+}): string[] {
+  const items = context.internalNewsItems || [];
+  const top = items[0];
+
+  if (top) {
+    return [
+      `Real editorial cover photo for a startup newsletter. Focus on this key topic: "${top.title}". Context: ${top.summary}. Show one authentic moment with real people in a startup setting, no text overlays.`,
+    ];
+  }
+
+  return [
+    `Real editorial cover photo for a startup newsletter in ${context.month}. Subject: ${context.subject}. Intro context: ${context.intro}. Show one authentic moment with real people, no text overlays.`,
+  ];
+}
+
+export async function generateCoverPromptFromDraftData(
+  context: {
+    month: string;
+    subject: string;
+    intro: string;
+    sections: Array<{ title: string; items: Array<{ title: string; summary: string }> }>;
+  },
+  apiKey: string
+): Promise<[string, string, string]> {
+  const compactSections = context.sections
+    .slice(0, 4)
+    .map((section) => ({
+      title: section.title,
+      items: section.items.slice(0, 3).map((item) => ({ title: item.title, summary: item.summary })),
+    }));
+
+  const requestBody = {
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You write DALL-E image prompts for a newsletter cover. Pick the single most important story from the input and create 3 prompt variants. Return ONLY valid JSON with keys: meme, photo, creative.",
+      },
+      {
+        role: "user",
+        content: `Create 3 cover image prompts based on this newsletter data:\n\n${JSON.stringify(
+          {
+            month: context.month,
+            subject: context.subject,
+            intro: context.intro,
+            sections: compactSections,
+          },
+          null,
+          2
+        )}\n\nReturn JSON with exactly these 3 keys:\n- meme: funny, relatable startup humor scene based on the key story (candid photo style, no text)\n- photo: authentic documentary-style editorial photo of the key story (real people, real place, natural light, no text)\n- creative: unexpected artistic reinterpretation of the key story (surreal, conceptual, visually striking, no text)\n\nMax 60 words per prompt. No text overlays in any image.`,
+      },
+    ],
+    response_format: { type: "json_object" },
+  };
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Cover prompt generation failed: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  const parsed = JSON.parse(extractResponseText(data));
+  return [
+    String(parsed.meme || "").trim(),
+    String(parsed.photo || "").trim(),
+    String(parsed.creative || "").trim(),
+  ];
 }
 
 export async function generateCoverImages(
-  prompt: string,
+  prompts: string[],
   apiKey: string,
   onImage?: (image: { prompt: string; imageBase64: string; index: number }) => void,
-  count = 3
 ): Promise<Array<{ prompt: string; imageBase64: string }>> {
   const results: Array<{ prompt: string; imageBase64: string }> = [];
 
-  console.log(`Starting cover image generation for ${count} images...`);
+  console.log(`Starting cover image generation for ${prompts.length} images...`);
 
   try {
-    for (let i = 0; i < count; i++) {
-      console.log(`Generating cover image ${i + 1}/${count}...`);
+    for (let i = 0; i < prompts.length; i++) {
+      const prompt = prompts[i];
+      console.log(`Generating cover image ${i + 1}/${prompts.length}...`);
       const imageBase64 = await generateMemeImage(prompt, apiKey);
       if (imageBase64) {
-        console.log(`Cover image ${i + 1}/${count} generated successfully`);
+        console.log(`Cover image ${i + 1}/${prompts.length} generated successfully`);
         results.push({ prompt, imageBase64 });
         onImage?.({ prompt, imageBase64, index: i });
       } else {
-        console.warn(`Cover image ${i + 1}/${count} generation returned null`);
+        console.warn(`Cover image ${i + 1}/${prompts.length} generation returned null`);
       }
 
-      // Small delay between requests to avoid rate limiting (except after last image)
-      if (i < count - 1) {
+      if (i < prompts.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
@@ -383,7 +470,7 @@ export async function generateCoverImages(
     console.error("Cover image generation error:", error);
   }
 
-  console.log(`Cover image generation complete: ${results.length}/${count} images generated`);
+  console.log(`Cover image generation complete: ${results.length}/${prompts.length} images generated`);
   return results;
 }
 

@@ -98,9 +98,9 @@ ${feedback}
 Please revise the newsletter according to the feedback above. Output the full revised JSON.`;
 }
 
-export const MEME_PROMPT_SYSTEM = `You generate creative, funny image prompts for a newsletter meme. The meme should be a simple, visually appealing illustration or cartoon related to the most notable internal news item. Keep it professional but humorous — think startup culture humor. The image should work at 1024x1024 pixels and be suitable for an email newsletter. Output only the image generation prompt text, nothing else.`;
+export const MEME_PROMPT_SYSTEM = `You generate DALL-E image prompts for newsletter memes. The image must look like a real photograph or candid scene, NOT digital art or illustration. Think relatable startup humor captured in a real-world photo style: office situations, reaction shots, everyday scenes with funny captions implied by context. Output only the DALL-E prompt text, nothing else.`;
 
-export const VISUAL_PROMPT_SYSTEM = `You generate image prompts for newsletter visuals. Each image should be a professional, visually appealing illustration or photograph (NOT infographics, charts, or diagrams). The images should relate to the internal news and work at 1024x1024 pixels, suitable for an email newsletter. Generate prompts for everyday scenes, people, objects, or abstract concepts — not data visualizations. Output only the image generation prompt text, nothing else.`;
+export const VISUAL_PROMPT_SYSTEM = `You generate DALL-E image prompts for newsletter visuals. Images must look like real photographs — candid office moments, team photos, event scenes, product shots. NOT illustrations, NOT digital art, NOT infographics. Style: natural lighting, real people, real places. Output only the DALL-E prompt text, nothing else.`;
 
 export function buildMemePromptUser(internalNewsItems: Array<{ title: string; summary: string }>): string {
   const topItem = internalNewsItems[0];
@@ -123,10 +123,12 @@ export function buildMultipleImagePrompts(
     };
   }
 
+  const secondItem = internalNewsItems[1] || topItem;
+
   return {
-    meme: `The most notable internal news this month is: "${topItem.title}" — ${topItem.summary}\n\nGenerate a creative, funny image prompt for a meme illustration about this news. The style should be a clean, modern cartoon/illustration suitable for a professional community newsletter.`,
-    visual1: `Based on the internal news "${topItem.title}", generate a professional visual showing: ${topItem.summary}\n\nCreate an inspiring, modern photograph or illustration (not a chart or infographic) that visually represents this topic. Think professional stock photo or artistic illustration style.`,
-    visual2: `The internal news "${topItem.title}" represents: ${topItem.summary}\n\nGenerate a creative, abstract professional visual that captures the essence or energy of this news. Use warm, professional colors and modern design. Avoid charts, diagrams, or infographics.`,
+    meme: `Relatable startup meme photo about: "${topItem.title}". ${topItem.summary}. Real photo style, candid office moment, funny situational humor. Natural lighting, realistic scene, like a photo someone took at work. No text overlays, no illustrations, no digital art.`,
+    visual1: `Real photograph: ${topItem.summary}. Scene related to "${topItem.title}". Candid, natural lighting, real people in a professional setting. Photo journalism style, not staged or artistic.`,
+    visual2: `Real photograph: ${secondItem.summary}. Scene related to "${secondItem.title}". Candid moment, natural environment, realistic and grounded. No filters, no artistic effects, no illustrations.`,
   };
 }
 
