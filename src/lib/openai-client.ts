@@ -249,8 +249,10 @@ export async function generateMemeImage(
   apiKey: string
 ): Promise<string | null> {
   try {
+    const imageModel = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5";
     console.log("generateMemeImage: Starting image generation...");
-    console.log("generateMemeImage: API key present:", !!apiKey, "length:", apiKey?.length || 0);
+    console.log("generateMemeImage: API key present:", !!apiKey);
+    console.log("generateMemeImage: Model:", imageModel);
     
     if (!apiKey) {
       console.error("generateMemeImage: No API key provided!");
@@ -268,9 +270,10 @@ export async function generateMemeImage(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "dall-e-3",
+        model: imageModel,
         prompt,
         size: "1024x1024",
+        quality: "low",
       }),
       signal: controller.signal,
     });
