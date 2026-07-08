@@ -5,6 +5,7 @@ import {
   buildDefaultCoverPrompt,
   generateCoverPromptFromDraftData,
 } from "@/lib/openai-client";
+import { extractSubjectLine, renderNewsletterHtml, renderNewsletterText } from "@/lib/renderer";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -85,8 +86,10 @@ export async function POST(request: NextRequest) {
             );
 
     const jobId = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    store.createCoverImageJob(jobId, previewKey, effectivePrompt[0]);
+    store.createCoverImageJob(jobId, previewKey, effectivePrompt[0] || "");
     store.updateCoverImageJob(jobId, { status: "running" });
+    preview.coverImageJobId = jobId;
+    await store.storePreview(previewKey, preview);
 
     // Fire and forget: generate images in the background, storing progress on the job
     (async () => {
@@ -111,6 +114,13 @@ export async function POST(request: NextRequest) {
             imageBase64: img.imageBase64,
             index,
           }));
+          if (images.length > 0 && currentPreview.structured.selectedCoverImageIndex === undefined) {
+            currentPreview.structured.selectedCoverImageIndex = 0;
+          }
+          currentPreview.html = renderNewsletterHtml(currentPreview.structured);
+          currentPreview.text = renderNewsletterText(currentPreview.structured);
+          currentPreview.subject = extractSubjectLine(currentPreview.structured);
+          currentPreview.preheader = currentPreview.structured.preheader;
           currentPreview.updatedAt = new Date();
           await store.storePreview(previewKey, currentPreview);
         }

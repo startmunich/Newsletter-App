@@ -229,6 +229,13 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
             imageBase64: img.imageBase64,
             index,
           }));
+          if (images.length > 0 && currentPreview.structured.selectedCoverImageIndex === undefined) {
+            currentPreview.structured.selectedCoverImageIndex = 0;
+          }
+          currentPreview.html = renderNewsletterHtml(currentPreview.structured);
+          currentPreview.text = renderNewsletterText(currentPreview.structured);
+          currentPreview.subject = extractSubjectLine(currentPreview.structured);
+          currentPreview.preheader = currentPreview.structured.preheader;
           currentPreview.updatedAt = new Date();
           await store.storePreview(previewKey, currentPreview);
         }

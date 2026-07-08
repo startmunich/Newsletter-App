@@ -10,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ key: string }> }
 ) {
   const { key } = await params;
-  const preview = store.getPreview(key);
+  const preview = await store.getPreview(key);
 
   if (!preview) {
     return NextResponse.json({ error: "Preview not found" }, { status: 404 });
@@ -25,7 +25,7 @@ export async function POST(
       const text = renderNewsletterText(draft);
       const subject = extractSubjectLine(draft);
 
-      store.updatePreview(key, {
+      await store.updatePreview(key, {
         html,
         text,
         subject,
@@ -40,7 +40,7 @@ export async function POST(
       if (typeof body.html !== "string" || !body.html.includes("<") || !body.html.includes(">")) {
         return NextResponse.json({ error: "Invalid HTML content" }, { status: 400 });
       }
-      store.updatePreview(key, { html: body.html });
+      await store.updatePreview(key, { html: body.html });
       return NextResponse.json({ ok: true });
     }
 

@@ -17,7 +17,11 @@ export async function compressPdf(
     });
 
     const formData = new FormData();
-    const blob = new Blob([pdfBuffer], { type: "application/pdf" });
+    const pdfArrayBuffer = pdfBuffer.buffer.slice(
+      pdfBuffer.byteOffset,
+      pdfBuffer.byteOffset + pdfBuffer.byteLength
+    ) as ArrayBuffer;
+    const blob = new Blob([pdfArrayBuffer], { type: "application/pdf" });
     formData.append("document", blob, filename);
     formData.append("instructions", instructions);
 

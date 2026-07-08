@@ -9,7 +9,7 @@ export default async function PreviewPage({
   params: Promise<{ key: string }>;
 }) {
   const { key } = await params;
-  const preview = store.getPreview(key);
+  const preview = await store.getPreview(key);
 
   if (!preview?.html) {
     notFound();

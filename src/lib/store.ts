@@ -1,5 +1,5 @@
 import { JobState, GenerationStep, PreviewState, CoverImageJob, CoverImage } from "./types";
-import { nocoGetAll, nocoCreate, nocoUpdate, nocoDelete } from "./nocodb";
+import { isNocoConfigured, nocoGetAll, nocoCreate, nocoUpdate, nocoDelete } from "./nocodb";
 
 class Store {
   private jobs: Map<string, JobState> = new Map();
@@ -18,6 +18,11 @@ class Store {
 
   private async loadCache(): Promise<void> {
     try {
+      if (!isNocoConfigured()) {
+        console.log("Store: NocoDB not configured, using in-memory previews");
+        return;
+      }
+
       const records = await nocoGetAll();
       for (const { rowId, preview } of records) {
         this.previewCache.set(preview.key, { data: preview, rowId });
