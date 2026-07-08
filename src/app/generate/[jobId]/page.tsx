@@ -24,7 +24,7 @@ export default function GenerateJobPage() {
       setJob(data);
 
       if (data.status === "done" && data.previewKey) {
-        router.push(`/review/${data.previewKey}`);
+        router.push(`/newsletter/${data.previewKey}`);
       }
     } catch {
       setError("Connection error");

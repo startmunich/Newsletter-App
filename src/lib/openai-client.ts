@@ -15,7 +15,7 @@ export async function uploadPdfToOpenAI(
   apiKey: string
 ): Promise<string> {
   const formData = new FormData();
-  const blob = new Blob([fileBuffer], { type: "application/pdf" });
+  const blob = new Blob([new Uint8Array(fileBuffer)], { type: "application/pdf" });
   formData.append("file", blob, filename);
   formData.append("purpose", "user_data");
 
@@ -53,7 +53,7 @@ export async function generateDraftWithFiles(
   }
 
   const requestBody = {
-    model: "gpt-4o",
+    model: "gpt-5.5",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userContent },
@@ -93,7 +93,7 @@ export async function generateDraftText(
   apiKey: string
 ): Promise<NewsletterDraft> {
   const requestBody = {
-    model: "gpt-4o",
+    model: "gpt-5.5",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -135,7 +135,7 @@ export async function reviseDraft(
   const userPrompt = buildReviseUserPrompt(originalDraft, feedback);
 
   const requestBody = {
-    model: "gpt-4o",
+    model: "gpt-5.5",
     messages: [
       { role: "system", content: REVISE_SYSTEM_PROMPT },
       { role: "user", content: userPrompt },
@@ -174,7 +174,7 @@ export async function runQaPass(
   apiKey: string
 ): Promise<NewsletterDraft> {
   const requestBody = {
-    model: "gpt-4o",
+    model: "gpt-5.5",
     messages: [
       { role: "system", content: QA_SYSTEM_PROMPT },
       {
@@ -245,18 +245,14 @@ export async function generateMemeImage(
   apiKey: string
 ): Promise<string | null> {
   try {
-    console.log("generateMemeImage: Starting image generation...");
-    console.log("generateMemeImage: API key present:", !!apiKey, "length:", apiKey?.length || 0);
-    
     if (!apiKey) {
       console.error("generateMemeImage: No API key provided!");
       return null;
     }
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout (gpt-image-2 can be slow)
 
-    console.log("generateMemeImage: Sending request to OpenAI...");
     const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: {
@@ -264,7 +260,7 @@ export async function generateMemeImage(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "dall-e-3",
+        model: "gpt-image-2",
         prompt,
         size: "1024x1024",
       }),
@@ -273,18 +269,13 @@ export async function generateMemeImage(
 
     clearTimeout(timeoutId);
 
-    console.log("generateMemeImage: Response status:", response.status);
-    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`generateMemeImage: API failed with status ${response.status}`);
-      console.error(`generateMemeImage: Error response:`, errorText);
+      console.error(`generateMemeImage: API failed with status ${response.status}:`, errorText);
       return null;
     }
 
     const data = await response.json();
-    console.log("generateMemeImage: API response received");
-    
     const firstImage = data.data?.[0];
     if (!firstImage) {
       console.error("generateMemeImage: No image data in response");
@@ -305,11 +296,10 @@ export async function generateMemeImage(
     const imgBuffer = await imgRes.arrayBuffer();
     const imageBase64 = Buffer.from(imgBuffer).toString("base64");
 
-    console.log(`generateMemeImage: Image generated successfully, base64 length: ${imageBase64.length}`);
     return imageBase64;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error("generateMemeImage: Request timeout after 60 seconds");
+      console.error("generateMemeImage: Request timeout after 180 seconds");
     } else if (error instanceof Error) {
       console.error("generateMemeImage: Fetch error:", error.name, error.message);
     } else {
@@ -398,7 +388,7 @@ export async function generateCoverPromptFromDraftData(
       {
         role: "system",
         content:
-          "You write DALL-E image prompts for a newsletter cover. Pick the single most important story from the input and create 3 prompt variants. Return ONLY valid JSON with keys: meme, photo, creative.",
+          "You write DALL-E image prompts for a newsletter cover. Pick the single most important story from the input and create 3 prompt variants. Each prompt must end with: 'This image is for the START Munich newsletter — a Munich-based student club for startups and aspiring entrepreneurs.' Return ONLY valid JSON with keys: meme, photo, creative.",
       },
       {
         role: "user",
@@ -445,33 +435,21 @@ export async function generateCoverImages(
   apiKey: string,
   onImage?: (image: { prompt: string; imageBase64: string; index: number }) => void,
 ): Promise<Array<{ prompt: string; imageBase64: string }>> {
-  const results: Array<{ prompt: string; imageBase64: string }> = [];
+  const results: Array<{ prompt: string; imageBase64: string } | null> = new Array(prompts.length).fill(null);
 
-  console.log(`Starting cover image generation for ${prompts.length} images...`);
-
-  try {
-    for (let i = 0; i < prompts.length; i++) {
-      const prompt = prompts[i];
-      console.log(`Generating cover image ${i + 1}/${prompts.length}...`);
+  await Promise.all(
+    prompts.map(async (prompt, i) => {
       const imageBase64 = await generateMemeImage(prompt, apiKey);
       if (imageBase64) {
-        console.log(`Cover image ${i + 1}/${prompts.length} generated successfully`);
-        results.push({ prompt, imageBase64 });
+        results[i] = { prompt, imageBase64 };
         onImage?.({ prompt, imageBase64, index: i });
       } else {
         console.warn(`Cover image ${i + 1}/${prompts.length} generation returned null`);
       }
+    })
+  );
 
-      if (i < prompts.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-    }
-  } catch (error) {
-    console.error("Cover image generation error:", error);
-  }
-
-  console.log(`Cover image generation complete: ${results.length}/${prompts.length} images generated`);
-  return results;
+  return results.filter((r): r is { prompt: string; imageBase64: string } => r !== null);
 }
 
 function extractResponseText(data: Record<string, unknown>): string {

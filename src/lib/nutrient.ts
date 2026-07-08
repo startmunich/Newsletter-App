@@ -17,7 +17,7 @@ export async function compressPdf(
     });
 
     const formData = new FormData();
-    const blob = new Blob([pdfBuffer], { type: "application/pdf" });
+    const blob = new Blob([new Uint8Array(pdfBuffer)], { type: "application/pdf" });
     formData.append("document", blob, filename);
     formData.append("instructions", instructions);
 

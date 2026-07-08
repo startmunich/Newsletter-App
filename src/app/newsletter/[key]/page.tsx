@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { PreviewState, CoverImage } from "@/lib/types";
 import { Sidebar } from "@/components/Sidebar";
@@ -22,8 +22,7 @@ export default function NewsletterDetailPage() {
   const [coverImages, setCoverImages] = useState<CoverImage[]>([]);
   const [coverJobStatus, setCoverJobStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [coverJobError, setCoverJobError] = useState<string | null>(null);
-  const [showRegeneratePrompt, setShowRegeneratePrompt] = useState(false);
-  const [regeneratePrompt, setRegeneratePrompt] = useState("");
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const coverPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopCoverPoll = () => {
@@ -37,7 +36,7 @@ export default function NewsletterDetailPage() {
     return () => stopCoverPoll();
   }, []);
 
-  const startPollingJob = (jobId: string) => {
+  const startPollingJob = useCallback((jobId: string) => {
     stopCoverPoll();
     coverPollRef.current = setInterval(async () => {
       try {
@@ -64,7 +63,7 @@ export default function NewsletterDetailPage() {
         /* transient */
       }
     }, 2000);
-  };
+  }, [key]);
 
   useEffect(() => {
     const fetchPreview = async () => {
@@ -92,8 +91,7 @@ export default function NewsletterDetailPage() {
     };
 
     fetchPreview();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, startPollingJob]);
 
   const handleCoverImageSelected = async (image: CoverImage) => {
     if (!preview) return;
@@ -109,42 +107,6 @@ export default function NewsletterDetailPage() {
     } catch (error) {
       console.error("Failed to select cover image:", error);
     }
-  };
-
-  const handleStartRegenerate = async () => {
-    if (!regeneratePrompt.trim()) return;
-    setCoverJobStatus("running");
-    setCoverImages([]);
-    setCoverJobError(null);
-    setShowRegeneratePrompt(false);
-
-    try {
-      const response = await fetch("/api/generate-cover-images", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ previewKey: key, prompt: regeneratePrompt }),
-      });
-      if (!response.ok) throw new Error("Failed to start generation");
-      const { jobId } = await response.json();
-      startPollingJob(jobId);
-    } catch (err) {
-      setCoverJobStatus("error");
-      setCoverJobError(err instanceof Error ? err.message : "Unknown error");
-    }
-  };
-
-  const openRegeneratePrompt = async () => {
-    // Load default prompt if not yet set
-    if (!regeneratePrompt) {
-      try {
-        const res = await fetch(`/api/generate-cover-images?previewKey=${encodeURIComponent(key)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setRegeneratePrompt(data.defaultPrompt || "");
-        }
-      } catch { /* ignore */ }
-    }
-    setShowRegeneratePrompt(true);
   };
 
   const handleSendTest = async () => {
@@ -299,42 +261,12 @@ export default function NewsletterDetailPage() {
                     )}
                   </div>
                   <button
-                    onClick={openRegeneratePrompt}
+                    onClick={() => setShowRegenerateModal(true)}
                     className="px-4 py-1.5 bg-[#2a2a42] text-[#f1f1f5] text-sm font-medium rounded-lg hover:bg-[#3a3a52] transition-colors"
                   >
                     Regenerate
                   </button>
                 </div>
-
-                {/* Inline regenerate prompt editor */}
-                {showRegeneratePrompt && (
-                  <div className="mb-4 bg-[#1a1a2e] border border-[#2a2a42] rounded-lg p-4">
-                    <label className="block text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider mb-2">
-                      Prompt
-                    </label>
-                    <textarea
-                      value={regeneratePrompt}
-                      onChange={(e) => setRegeneratePrompt(e.target.value)}
-                      rows={4}
-                      className="w-full px-3 py-2 bg-[#2a2a42] border border-[#3a3a52] rounded-lg text-[#f1f1f5] placeholder-[#606078] focus:outline-none focus:border-[#D0006F] resize-y text-sm mb-3"
-                    />
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => setShowRegeneratePrompt(false)}
-                        className="px-4 py-1.5 bg-[#2a2a42] text-[#f1f1f5] text-sm rounded-lg hover:bg-[#3a3a52] transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleStartRegenerate}
-                        disabled={!regeneratePrompt.trim()}
-                        className="px-4 py-1.5 bg-[#D0006F] text-white text-sm font-semibold rounded-lg hover:bg-[#a80055] disabled:opacity-50 transition-colors"
-                      >
-                        Generate Images
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 {/* Image grid */}
                 <div className="grid grid-cols-3 gap-4">
@@ -351,7 +283,7 @@ export default function NewsletterDetailPage() {
                           }`}
                         >
                           <img
-                            src={`data:image/png;base64,${image.imageBase64}`}
+                            src={image.imageUrl || `data:image/png;base64,${image.imageBase64}`}
                             alt={`Cover option ${typeLabel}`}
                             className="w-full aspect-square object-cover"
                           />
@@ -445,6 +377,22 @@ export default function NewsletterDetailPage() {
           </div>
         </div>
       )}
+
+      <CoverImageGeneratorModal
+        isOpen={showRegenerateModal}
+        onClose={() => setShowRegenerateModal(false)}
+        previewKey={key}
+        onImageSelected={(image) => {
+          handleCoverImageSelected(image);
+          setShowRegenerateModal(false);
+        }}
+        onJobStarted={(jobId) => {
+          setCoverJobStatus("running");
+          setCoverImages([]);
+          setCoverJobError(null);
+          startPollingJob(jobId);
+        }}
+      />
     </div>
   );
 }

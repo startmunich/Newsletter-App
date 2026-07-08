@@ -8,6 +8,7 @@ interface CoverImageGeneratorModalProps {
   onClose: () => void;
   onImageSelected: (image: CoverImage) => void;
   previewKey: string;
+  onJobStarted?: (jobId: string) => void;
 }
 
 type Phase = "prompt" | "generating" | "results";
@@ -17,16 +18,17 @@ export default function CoverImageGeneratorModal({
   onClose,
   onImageSelected,
   previewKey,
+  onJobStarted,
 }: CoverImageGeneratorModalProps) {
   const [phase, setPhase] = useState<Phase>("prompt");
-  const [prompt, setPrompt] = useState("");
+  const [prompts, setPrompts] = useState<[string, string, string]>(["", "", ""]);
   const [promptLoading, setPromptLoading] = useState(false);
   const [images, setImages] = useState<CoverImage[]>([]);
   const [jobDone, setJobDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load the default prompt when the modal opens
+  // Load the default prompts when the modal opens
   useEffect(() => {
     if (!isOpen) return;
 
@@ -39,10 +41,13 @@ export default function CoverImageGeneratorModal({
     fetch(`/api/generate-cover-images?previewKey=${encodeURIComponent(previewKey)}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.defaultPrompt) setPrompt(data.defaultPrompt);
+        if (data.prompts && Array.isArray(data.prompts)) {
+          const p = data.prompts as string[];
+          setPrompts([p[0] || "", p[1] || "", p[2] || ""]);
+        }
       })
       .catch(() => {
-        /* keep whatever prompt exists */
+        /* keep whatever prompts exist */
       })
       .finally(() => setPromptLoading(false));
   }, [isOpen, previewKey]);
@@ -71,7 +76,7 @@ export default function CoverImageGeneratorModal({
       const response = await fetch("/api/generate-cover-images", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ previewKey, prompt }),
+        body: JSON.stringify({ previewKey, prompts }),
       });
 
       if (!response.ok) {
@@ -80,6 +85,8 @@ export default function CoverImageGeneratorModal({
       }
 
       const { jobId } = await response.json();
+
+      if (onJobStarted) onJobStarted(jobId);
 
       // Poll for progressive results
       stopPolling();
@@ -142,21 +149,31 @@ export default function CoverImageGeneratorModal({
         {/* Prompt editing */}
         {phase === "prompt" && (
           <>
-            <label className="block text-sm font-semibold text-[#a0a0b8] uppercase tracking-wider mb-2">
-              Prompt
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              disabled={promptLoading}
-              rows={5}
-              placeholder={promptLoading ? "Loading prompt..." : "Describe the cover image..."}
-              className="w-full px-4 py-3 bg-[#2a2a42] border border-[#3a3a52] rounded-lg text-[#f1f1f5] placeholder-[#606078] focus:outline-none focus:border-[#D0006F] mb-2 resize-y"
-            />
-            <p className="text-xs text-[#606078] mb-6">
-                3 images will be generated: Meme, Photo, and Creative. Generation runs in the background.
+            <p className="text-xs text-[#606078] mb-4">
+              Edit any prompt below to customize the corresponding image. Generation runs in the background.
+            </p>
 
-            <div className="flex gap-4">
+            {(["Meme", "Photo", "Creative"] as const).map((label, idx) => (
+              <div key={label} className="mb-4">
+                <label className="block text-sm font-semibold text-[#a0a0b8] uppercase tracking-wider mb-2">
+                  {label}
+                </label>
+                <textarea
+                  value={prompts[idx]}
+                  onChange={(e) => {
+                    const updated = [prompts[0], prompts[1], prompts[2]] as [string, string, string];
+                    updated[idx] = e.target.value;
+                    setPrompts(updated);
+                  }}
+                  disabled={promptLoading}
+                  rows={4}
+                  placeholder={promptLoading ? "Loading prompt..." : `Describe the ${label.toLowerCase()} cover image...`}
+                  className="w-full px-4 py-3 bg-[#2a2a42] border border-[#3a3a52] rounded-lg text-[#f1f1f5] placeholder-[#606078] focus:outline-none focus:border-[#D0006F] resize-y"
+                />
+              </div>
+            ))}
+
+            <div className="flex gap-4 mt-2">
               <button
                 onClick={handleClose}
                 className="px-6 py-2 bg-[#2a2a42] text-[#f1f1f5] font-medium rounded-lg hover:bg-[#3a3a52] transition-colors"
@@ -165,7 +182,7 @@ export default function CoverImageGeneratorModal({
               </button>
               <button
                 onClick={handleStartGeneration}
-                disabled={promptLoading || !prompt.trim()}
+                disabled={promptLoading || !prompts.every(p => p.trim().length > 0)}
                 className="px-6 py-2 bg-[#D0006F] hover:bg-[#a80055] text-white font-semibold rounded-lg disabled:opacity-50 transition-colors"
               >
                 Generate Images
@@ -192,7 +209,7 @@ export default function CoverImageGeneratorModal({
                   onClick={() => handleSelectImage(image)}
                 >
                   <img
-                    src={`data:image/png;base64,${image.imageBase64}`}
+                    src={image.imageUrl || `data:image/png;base64,${image.imageBase64}`}
                     alt={`Cover option ${image.index + 1}`}
                     className="w-full aspect-square object-cover rounded-lg hover:opacity-80 transition-opacity"
                   />

@@ -1,6 +1,15 @@
 import { NewsletterDraft } from "./types";
 
-export const DRAFT_SYSTEM_PROMPT = `You draft START Munich monthly community newsletters from monthly recaps, attached PDFs, and Luma event data. Output strict JSON only matching the provided schema. Use only source-grounded facts. Never invent items, metrics, quotes, or filler. If a source-backed topic is important but ambiguous enough that publishing it would require guessing, set clarificationNeeded to true and write one concise clarificationQuestion. Do not ask about non-blocking details. Never include sensitive financial data. Public-facing ticket prices are allowed, but omit internal revenue, profit, budget, sponsorship amounts, cash balances, runway, costs, margins.`;
+export const DRAFT_SYSTEM_PROMPT = `You draft START Munich monthly community newsletters from monthly recaps, attached PDFs, and Luma event data. Output strict JSON only matching the provided schema. Use only source-grounded facts. Never invent items, metrics, quotes, or filler.
+
+CRITICAL — be concrete and specific:
+- Name the actual people involved (e.g. "Lisa Müller joins as VP Marketing" not "our executive board saw changes").
+- State the exact outcome (e.g. "TechCorp signed as Gold sponsor" not "we secured a new sponsorship").
+- Include real numbers when available (e.g. "47 participants" not "a great turnout").
+- Describe what actually happened, not a meta-summary of the fact that something happened.
+- Never use vague filler like "updates to our structure", "various improvements", or "exciting developments".
+
+If a source-backed topic is important but ambiguous enough that publishing it would require guessing, set clarificationNeeded to true and write one concise clarificationQuestion. Do not ask about non-blocking details. Never include sensitive financial data. Public-facing ticket prices are allowed, but omit internal revenue, profit, budget, sponsorship amounts, cash balances, runway, costs, margins.`;
 
 export function buildDraftUserPrompt(params: {
   sourceText: string;
@@ -98,9 +107,9 @@ ${feedback}
 Please revise the newsletter according to the feedback above. Output the full revised JSON.`;
 }
 
-export const MEME_PROMPT_SYSTEM = `You generate DALL-E image prompts for newsletter memes. The image must look like a real photograph or candid scene, NOT digital art or illustration. Think relatable startup humor captured in a real-world photo style: office situations, reaction shots, everyday scenes with funny captions implied by context. Output only the DALL-E prompt text, nothing else.`;
+export const MEME_PROMPT_SYSTEM = `You generate DALL-E image prompts for newsletter memes. The image must look like a real photograph or candid scene, NOT digital art or illustration. Think relatable startup humor captured in a real-world photo style: office situations, reaction shots, everyday scenes with funny captions implied by context. Each prompt must end with: "This image is for the START Munich newsletter — a Munich-based student club for startups and aspiring entrepreneurs." Output only the DALL-E prompt text, nothing else.`;
 
-export const VISUAL_PROMPT_SYSTEM = `You generate DALL-E image prompts for newsletter visuals. Images must look like real photographs — candid office moments, team photos, event scenes, product shots. NOT illustrations, NOT digital art, NOT infographics. Style: natural lighting, real people, real places. Output only the DALL-E prompt text, nothing else.`;
+export const VISUAL_PROMPT_SYSTEM = `You generate DALL-E image prompts for newsletter visuals. Images must look like real photographs — candid office moments, team photos, event scenes, product shots. NOT illustrations, NOT digital art, NOT infographics. Style: natural lighting, real people, real places. Each prompt must end with: "This image is for the START Munich newsletter — a Munich-based student club for startups and aspiring entrepreneurs." Output only the DALL-E prompt text, nothing else.`;
 
 export function buildMemePromptUser(internalNewsItems: Array<{ title: string; summary: string }>): string {
   const topItem = internalNewsItems[0];

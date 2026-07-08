@@ -5,6 +5,7 @@ import { useState } from "react";
 interface CoverImage {
   prompt: string;
   imageBase64: string;
+  imageUrl?: string;
   index: number;
 }
 
@@ -78,9 +79,9 @@ export function CoverImageSelector({
                 : "border-[#2a2a42] hover:border-[#3a3a52]"
             } ${selecting ? "opacity-50 cursor-wait" : ""}`}
           >
-            {image.imageBase64 && (
+            {(image.imageUrl || image.imageBase64) && (
               <img
-                src={`data:image/png;base64,${image.imageBase64}`}
+                src={image.imageUrl || `data:image/png;base64,${image.imageBase64}`}
                 alt={`Cover option ${image.index + 1}`}
                 className="w-full h-48 object-cover"
               />

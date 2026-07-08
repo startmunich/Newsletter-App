@@ -21,6 +21,7 @@ export interface GeneratedImage {
 export interface CoverImage {
   prompt: string;
   imageBase64: string;
+  imageUrl?: string;
   index: number; // 0, 1, or 2
 }
 

@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
         },
         openAiApiKey
       );
-      return NextResponse.json({ defaultPrompt: aiPrompt });
+      return NextResponse.json({ prompts: aiPrompt });
     }
   } catch (error) {
     console.error("GET cover prompt AI generation failed, falling back:", error);
@@ -48,14 +48,14 @@ export async function GET(request: NextRequest) {
     internalNewsItems: [],
   })[0];
 
-  return NextResponse.json({ defaultPrompt: fallbackPrompt });
+  return NextResponse.json({ prompts: [fallbackPrompt, fallbackPrompt, fallbackPrompt] });
 }
 
 // POST: start a background cover image generation job, return jobId immediately
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { previewKey, prompt } = body;
+    const { previewKey, prompt, prompts } = body;
 
     if (!previewKey || typeof previewKey !== "string") {
       return NextResponse.json({ error: "previewKey is required" }, { status: 400 });
@@ -71,18 +71,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Preview not found" }, { status: 404 });
     }
 
-    const effectivePrompt: string[] =
-      typeof prompt === "string" && prompt.trim().length > 0
-        ? [prompt.trim()]
-          : await generateCoverPromptFromDraftData(
-              {
-                month: preview.structured.month || preview.monthGenerated || "",
-                subject: preview.structured.subject || "",
-                intro: preview.structured.intro || "",
-                sections: preview.structured.sections || [],
-              },
-              openAiApiKey
-            );
+    let effectivePrompt: string[];
+
+    if (Array.isArray(prompts) && prompts.length > 0) {
+      const filtered = prompts.map((p: unknown) => (typeof p === "string" ? p.trim() : "")).filter(Boolean);
+      if (filtered.length === 0) {
+        return NextResponse.json({ error: "prompts array must contain at least one non-empty string" }, { status: 400 });
+      }
+      effectivePrompt = filtered;
+    } else if (typeof prompt === "string" && prompt.trim().length > 0) {
+      effectivePrompt = [prompt.trim()];
+    } else {
+      effectivePrompt = await generateCoverPromptFromDraftData(
+        {
+          month: preview.structured.month || preview.monthGenerated || "",
+          subject: preview.structured.subject || "",
+          intro: preview.structured.intro || "",
+          sections: preview.structured.sections || [],
+        },
+        openAiApiKey
+      );
+    }
 
     const jobId = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     store.createCoverImageJob(jobId, previewKey, effectivePrompt[0]);

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PreviewState, JobState } from "@/lib/types";
+import { PreviewState, JobState, CoverImageJob } from "@/lib/types";
 
 interface SidebarProps {
   activeKey?: string;
@@ -13,6 +13,7 @@ export function Sidebar({ activeKey }: SidebarProps) {
   const router = useRouter();
   const [previews, setPreviews] = useState<PreviewState[]>([]);
   const [activeJobs, setActiveJobs] = useState<JobState[]>([]);
+  const [activeCoverJobs, setActiveCoverJobs] = useState<CoverImageJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -34,7 +35,8 @@ export function Sidebar({ activeKey }: SidebarProps) {
 
         if (jobsRes.ok) {
           const data = await jobsRes.json();
-          setActiveJobs(data || []);
+          setActiveJobs(data.jobs || []);
+          setActiveCoverJobs(data.coverJobs || []);
         }
       } catch (error) {
         console.error("Failed to fetch data:", error);
@@ -79,6 +81,8 @@ export function Sidebar({ activeKey }: SidebarProps) {
     await fetch(`/api/preview-data/${key}`, { method: "DELETE" });
     if (activeKey === key) router.push("/");
   };
+
+  const coverGeneratingKeys = new Set(activeCoverJobs.map((j) => j.previewKey));
 
   return (
     <aside className="w-64 bg-[#1a1a2e] border-r border-[#2a2a42] h-screen overflow-y-auto">
@@ -207,6 +211,12 @@ export function Sidebar({ activeKey }: SidebarProps) {
                         <div className="text-xs text-[#606078] mt-0.5">
                           {preview.status === "sent" ? "✓ Sent" : "◦ Draft"} · {new Date(preview.updatedAt).toLocaleDateString()}
                         </div>
+                        {coverGeneratingKeys.has(preview.key) && (
+                          <span className="flex items-center gap-1 text-[10px] text-magenta mt-0.5">
+                            <span className="inline-block w-2 h-2 rounded-full border border-magenta border-t-transparent animate-spin" />
+                            generating cover…
+                          </span>
+                        )}
                       </Link>
                     )}
 

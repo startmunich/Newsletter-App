@@ -1,5 +1,5 @@
 import { JobState, GenerationStep, PreviewState, CoverImageJob, CoverImage } from "./types";
-import { nocoGetAll, nocoCreate, nocoUpdate, nocoDelete } from "./nocodb";
+import { nocoGetAll, nocoCreate, nocoUpdate, nocoDelete, nocoUploadAttachment, NocoAttachment } from "./nocodb";
 
 class Store {
   private jobs: Map<string, JobState> = new Map();
@@ -22,7 +22,6 @@ class Store {
       for (const { rowId, preview } of records) {
         this.previewCache.set(preview.key, { data: preview, rowId });
       }
-      console.log(`Store: Loaded ${records.length} previews from NocoDB`);
     } catch (err) {
       console.error("Store: Failed to load from NocoDB, using empty cache:", err);
     }
@@ -56,10 +55,8 @@ class Store {
     const step = job.steps.find((s) => s.name === stepName);
     if (step) {
       Object.assign(step, update);
-      console.log(`Store: Updated step "${stepName}" to status "${update.status}" - ${update.message || ""}`);
     } else {
       job.steps.push({ name: stepName, status: "pending", ...update });
-      console.log(`Store: Created step "${stepName}" with status "${update.status || "pending"}" - ${update.message || ""}`);
     }
   }
 
@@ -70,13 +67,48 @@ class Store {
     // Update memory immediately
     this.previewCache.set(key, { data: state, rowId: existing?.rowId });
 
+    // Upload cover images that have base64 but no imageUrl yet
+    let attachments: (NocoAttachment | null)[] | undefined;
+    const coverImages = state.structured?.coverImages;
+    if (coverImages && coverImages.some((img) => img.imageBase64 && !img.imageUrl)) {
+      try {
+        const uploadResults = await Promise.all(
+          coverImages.map(async (img, i) => {
+            if (img.imageBase64 && !img.imageUrl) {
+              try {
+                return await nocoUploadAttachment(img.imageBase64, `cover-${key}-${i}.png`);
+              } catch (err) {
+                console.error(`Store: Failed to upload cover image ${i}:`, err);
+                return null;
+              }
+            }
+            return undefined;
+          })
+        );
+        // Only set attachments if at least one upload succeeded
+        if (uploadResults.some((r) => r !== undefined)) {
+          attachments = uploadResults as (NocoAttachment | null)[];
+          // Update in-memory imageUrl for successfully uploaded images
+          for (let i = 0; i < uploadResults.length; i++) {
+            const att = uploadResults[i];
+            if (att && coverImages[i]) {
+              const url = att.signedPath || att.url || "";
+              coverImages[i].imageUrl = url.startsWith("http") ? url : `https://ndb.startmunich.de${url.startsWith("/") ? "" : "/"}${url}`;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Store: Cover image upload error:", err);
+      }
+    }
+
     // Persist to NocoDB asynchronously
     if (existing?.rowId) {
-      nocoUpdate(existing.rowId, state).catch((err) =>
+      nocoUpdate(existing.rowId, state, attachments).catch((err) =>
         console.error("Store: NocoDB update error:", err)
       );
     } else {
-      nocoCreate(key, state)
+      nocoCreate(key, state, attachments)
         .then((rowId) => {
           const entry = this.previewCache.get(key);
           if (entry) entry.rowId = rowId;
@@ -124,21 +156,13 @@ class Store {
   }
 
   getAllJobs(): JobState[] {
-    return Array.from(this.jobs.values()).sort((a, b) => {
-      const aId = parseInt(a.id.split("_")[1] || "0");
-      const bId = parseInt(b.id.split("_")[1] || "0");
-      return bId - aId;
-    });
+    return Array.from(this.jobs.values()).reverse();
   }
 
   getActiveJobs(): JobState[] {
     return Array.from(this.jobs.values())
       .filter((job) => job.status === "pending" || job.status === "running")
-      .sort((a, b) => {
-        const aId = parseInt(a.id.split("_")[1] || "0");
-        const bId = parseInt(b.id.split("_")[1] || "0");
-        return bId - aId;
-      });
+      .reverse();
   }
 
   // ---- Cover image background jobs ----
@@ -173,20 +197,21 @@ class Store {
     }
   }
 
-  private cleanOldPreviews(): void {
-    // No-op: NocoDB is the source of truth. Old previews are not pruned.
+  getActiveCoverImageJobs(): CoverImageJob[] {
+    return Array.from(this.coverImageJobs.values())
+      .filter((job) => job.status === "pending" || job.status === "running");
   }
 }
 
-const globalWithStore = global as typeof globalThis & { __store?: Store };
-// Recreate the store if it's missing or was created before newer methods were added
-// (prevents stale singletons during dev hot-reloads).
-if (
-  !globalWithStore.__store ||
-  typeof globalWithStore.__store.createCoverImageJob !== "function" ||
-  typeof globalWithStore.__store.deletePreview !== "function"
-) {
+const STORE_VERSION = 3;
+const globalWithStore = global as typeof globalThis & {
+  __store?: Store;
+  __storeVersion?: number;
+};
+
+if (!globalWithStore.__store || globalWithStore.__storeVersion !== STORE_VERSION) {
   globalWithStore.__store = new Store();
+  globalWithStore.__storeVersion = STORE_VERSION;
 }
 
 export const store = globalWithStore.__store;
