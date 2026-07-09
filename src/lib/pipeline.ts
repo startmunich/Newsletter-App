@@ -165,6 +165,7 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
     // Step 9: Save preview
     store.updateStep(jobId, "Saving preview", { status: "running" });
     const previewKey = generateKey();
+    const previewId = `ID_${previewKey.split("_").slice(-1)[0].slice(0, 6).toUpperCase()}`;
 
     const previewState: PreviewState = {
       key: previewKey,
@@ -178,6 +179,7 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
       updatedAt: new Date(),
       status: "reviewing",
       monthGenerated: month,
+      name: previewId,
     };
 
     // Start cover image generation in background automatically

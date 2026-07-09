@@ -95,10 +95,28 @@ export function buildReviseUserPrompt(
   originalDraft: NewsletterDraft,
   feedback: string
 ): string {
+  // Strip binary image data before serializing — base64 blobs can exceed the context limit.
+  const draftForPrompt: NewsletterDraft = {
+    ...originalDraft,
+    coverImages: originalDraft.coverImages?.map((img) => ({
+      ...img,
+      imageBase64: "",
+    })),
+    internalNewsMeme: originalDraft.internalNewsMeme
+      ? {
+          ...originalDraft.internalNewsMeme,
+          images: originalDraft.internalNewsMeme.images?.map((img) => ({
+            ...img,
+            imageBase64: undefined,
+          })),
+        }
+      : undefined,
+  };
+
   return `Here is the current newsletter draft:
 
 \`\`\`json
-${JSON.stringify(originalDraft, null, 2)}
+${JSON.stringify(draftForPrompt, null, 2)}
 \`\`\`
 
 === EDITOR FEEDBACK ===

@@ -211,10 +211,6 @@ export function ActionBar({ previewKey, testEmailSent, approvalVersion, status, 
           )}
         </div>
       </div>
-
-      <div className="mt-2 text-xs text-[#3a3a57]">
-        Version {approvalVersion} {testEmailSent && "• Test email sent"}
-      </div>
     </div>
   );
 }

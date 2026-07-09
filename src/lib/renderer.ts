@@ -199,7 +199,8 @@ export function renderNewsletterHtml(draft: NewsletterDraft): string {
               <p style="margin: 0 0 8px 0; font-size: 12px; color: #999999;">Automatically generated, approved by human. May contain mistakes.</p>
               <p style="margin: 0; font-size: 12px; color: #999999;">
                 You&rsquo;re receiving this because you&rsquo;re part of the START Munich community.<br/>
-                <a href="{{unsubscribe}}" style="color: ${MAGENTA}; text-decoration: underline;">Unsubscribe</a>
+                To unsubscribe from this newsletter, visit your profile settings in the member platform:<br/>
+                <a href="https://my.startmunich.de/dashboard/user/settings/profile" style="color: ${MAGENTA}; text-decoration: underline;">my.startmunich.de &rarr; Profile Settings</a>
               </p>
             </td>
           </tr>
@@ -234,11 +235,12 @@ export function renderNewsletterText(draft: NewsletterDraft): string {
 
   text += `${"─".repeat(40)}\n`;
   text += `© ${new Date().getFullYear()} START Munich\n`;
-  text += `Unsubscribe: {{unsubscribe}}\n`;
+  text += `To unsubscribe from this newsletter, update your preferences in the member platform profile settings:\n`;
+  text += `https://my.startmunich.de/dashboard/user/settings/profile\n`;
 
   return text;
 }
 
 export function extractSubjectLine(draft: NewsletterDraft): string {
-  return draft.subject || draft.draftSubject || `START Munich Newsletter - ${draft.month}`;
+  return `START Munich Newsletter ${draft.month}`;
 }

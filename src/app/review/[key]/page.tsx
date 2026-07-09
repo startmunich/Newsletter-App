@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { HtmlPreview } from "@/components/HtmlPreview";
-import { ActionBar } from "@/components/ActionBar";
 import { Sidebar } from "@/components/Sidebar";
-import { CoverImageSelector } from "@/components/CoverImageSelector";
-import { PreviewState, CoverImage } from "@/lib/types";
+import { PreviewState } from "@/lib/types";
 
 export default function ReviewPage() {
   const params = useParams();
+  const router = useRouter();
   const previewKey = params.key as string;
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,7 +18,6 @@ export default function ReviewPage() {
   const [refining, setRefining] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editedHtml, setEditedHtml] = useState("");
-  const [selectedCoverImageIndex, setSelectedCoverImageIndex] = useState<number | undefined>();
 
   useEffect(() => {
     async function fetchMetadata() {
@@ -32,7 +30,6 @@ export default function ReviewPage() {
         }
         const data = await res.json();
         setPreview(data);
-        setSelectedCoverImageIndex(data.structured?.selectedCoverImageIndex ?? 0);
       } catch {
         setError("Failed to load preview");
       } finally {
@@ -57,8 +54,9 @@ export default function ReviewPage() {
       });
 
       if (res.ok) {
+        const data = await res.json();
         setRefinementPrompt("");
-        setRefreshKey((k) => k + 1);
+        router.push(`/review/${data.newKey}`);
       } else {
         alert("Failed to refine newsletter");
       }
@@ -156,20 +154,6 @@ export default function ReviewPage() {
             </div>
 
             <div className="border-t border-[#2a2a42] pt-6">
-              {preview?.structured.coverImages && preview.structured.coverImages.length > 0 && (
-                <CoverImageSelector
-                  images={preview.structured.coverImages}
-                  selectedIndex={selectedCoverImageIndex}
-                  previewKey={previewKey}
-                  onSelect={(index) => {
-                    setSelectedCoverImageIndex(index);
-                    setRefreshKey((k) => k + 1);
-                  }}
-                />
-              )}
-            </div>
-
-            <div className="border-t border-[#2a2a42] pt-6">
               <button
                 onClick={handleSaveDraft}
                 disabled={saving}
@@ -181,7 +165,7 @@ export default function ReviewPage() {
           </div>
 
           {/* Right: Editable Preview */}
-          <div className="w-2/3 overflow-y-auto">
+          <div className="w-2/3 min-h-0 flex flex-col">
             <HtmlPreview
               previewKey={previewKey}
               refreshKey={refreshKey}
@@ -190,15 +174,6 @@ export default function ReviewPage() {
             />
           </div>
         </div>
-
-        {/* Bottom: Actions */}
-        <ActionBar
-          previewKey={previewKey}
-          testEmailSent={!!preview?.testEmailSentAt}
-          approvalVersion={preview?.approvalVersion || 1}
-          status={preview?.status || "reviewing"}
-          hideTestEmail={true}
-        />
       </main>
     </div>
   );
