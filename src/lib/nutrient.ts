@@ -1,7 +1,9 @@
 export async function compressPdf(
   pdfBuffer: Buffer,
   filename: string,
-  apiKey: string
+  apiKey: string,
+  // Nutrient image quality: 1 (best quality) … 4 (smallest size). Default 2.
+  imageOptimizationQuality: number = 2
 ): Promise<Buffer> {
   try {
     const instructions = JSON.stringify({
@@ -11,7 +13,7 @@ export async function compressPdf(
         optimize: {
           disableImages: false,
           mrcCompression: true,
-          imageOptimizationQuality: 2,
+          imageOptimizationQuality,
         },
       },
     });

@@ -17,6 +17,17 @@ import { renderNewsletterHtml, renderNewsletterText, extractSubjectLine } from "
 const EXTERNAL_CALENDAR = "cal-1MxD65bgV0Hcb0r";
 const INTERNAL_CALENDAR = "cal-uEAobzlyVj0mtrw";
 
+// OpenAI rejects a request whose attached files exceed 50 MB in total.
+const OPENAI_TOTAL_FILE_LIMIT_BYTES = 50 * 1024 * 1024;
+// When over the limit, re-compress files larger than this more aggressively.
+const AGGRESSIVE_RECOMPRESS_THRESHOLD_BYTES = 10 * 1024 * 1024;
+// Nutrient image quality: 1 (best) … 4 (smallest). 4 = most aggressive shrink.
+const AGGRESSIVE_IMAGE_QUALITY = 4;
+
+function formatMB(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function generateKey(): string {
   return `preview_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -60,13 +71,67 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
     const fileIds: string[] = [];
 
     if (input.pdfFiles.length > 0) {
+      // Compress first (if configured), then verify the combined size fits under
+      // OpenAI's 50 MB total-file limit before uploading anything — otherwise the
+      // draft request fails late with an opaque "file_above_max_size" error.
+      const prepared: Array<{ name: string; buffer: Buffer }> = [];
       for (const pdf of input.pdfFiles) {
-        try {
-          let buffer = pdf.buffer;
-          if (input.nutrientApiKey) {
+        let buffer = pdf.buffer;
+        if (input.nutrientApiKey) {
+          try {
             buffer = await compressPdf(buffer, pdf.name, input.nutrientApiKey);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`Failed to compress PDF ${pdf.name}:`, msg);
+            throw new Error(`PDF compression failed for ${pdf.name}: ${msg}`);
           }
-          const fileId = await uploadPdfToOpenAI(buffer, pdf.name, input.openAiApiKey);
+        }
+        prepared.push({ name: pdf.name, buffer });
+      }
+
+      let totalBytes = prepared.reduce((sum, p) => sum + p.buffer.length, 0);
+
+      // Still over the limit? Re-compress the largest files more aggressively
+      // (only the big ones, to preserve quality where it doesn't matter) and
+      // re-check before giving up.
+      if (totalBytes > OPENAI_TOTAL_FILE_LIMIT_BYTES && input.nutrientApiKey) {
+        store.updateStep(jobId, "Uploading PDFs", {
+          status: "running",
+          message: `Total ${formatMB(totalBytes)} over limit — compressing large PDFs…`,
+        });
+        for (const p of prepared) {
+          if (p.buffer.length <= AGGRESSIVE_RECOMPRESS_THRESHOLD_BYTES) continue;
+          try {
+            const shrunk = await compressPdf(
+              p.buffer,
+              p.name,
+              input.nutrientApiKey,
+              AGGRESSIVE_IMAGE_QUALITY
+            );
+            // Keep whichever is smaller (aggressive pass should win, but guard).
+            if (shrunk.length < p.buffer.length) p.buffer = shrunk;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`Aggressive compression failed for ${p.name}:`, msg);
+          }
+        }
+        totalBytes = prepared.reduce((sum, p) => sum + p.buffer.length, 0);
+      }
+
+      if (totalBytes > OPENAI_TOTAL_FILE_LIMIT_BYTES) {
+        const breakdown = prepared
+          .map((p) => `${p.name} (${formatMB(p.buffer.length)})`)
+          .join(", ");
+        throw new Error(
+          `Attached PDFs total ${formatMB(totalBytes)} even after compression, which ` +
+            `exceeds OpenAI's ${formatMB(OPENAI_TOTAL_FILE_LIMIT_BYTES)} limit. ` +
+            `Remove or shrink some files: ${breakdown}`
+        );
+      }
+
+      for (const pdf of prepared) {
+        try {
+          const fileId = await uploadPdfToOpenAI(pdf.buffer, pdf.name, input.openAiApiKey);
           fileIds.push(fileId);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -76,7 +141,7 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
       }
       store.updateStep(jobId, "Uploading PDFs", {
         status: "done",
-        message: `${fileIds.length} file(s) uploaded`,
+        message: `${fileIds.length} file(s) uploaded (${formatMB(totalBytes)})`,
       });
     } else {
       store.updateStep(jobId, "Uploading PDFs", { status: "done", message: "No PDFs to upload" });

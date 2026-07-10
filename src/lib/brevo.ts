@@ -1,8 +1,17 @@
+const DEFAULT_LIST_ID = 252;
+
 interface CreateCampaignParams {
   subject: string;
   preheader: string;
   htmlContent: string;
   textContent: string;
+  apiKey: string;
+  listId?: number;
+}
+
+interface SyncBatchListParams {
+  listId: number;
+  emails: string[];
   apiKey: string;
 }
 
@@ -17,7 +26,7 @@ interface SendTestEmailParams {
 export async function createAndSendCampaign(
   params: CreateCampaignParams
 ): Promise<number> {
-  const { subject, preheader, htmlContent, textContent, apiKey } = params;
+  const { subject, preheader, htmlContent, textContent, apiKey, listId } = params;
 
   const campaignBody = {
     name: `START Newsletter - ${new Date().toISOString().slice(0, 10)}`,
@@ -28,7 +37,7 @@ export async function createAndSendCampaign(
       email: "community@mail.startmunich.de",
     },
     replyTo: "community@mail.startmunich.de",
-    recipients: { listIds: [252] },
+    recipients: { listIds: [listId ?? DEFAULT_LIST_ID] },
     htmlContent,
     textContent,
     tag: "start-newsletter",
@@ -98,5 +107,75 @@ export async function sendTestEmail(params: SendTestEmailParams): Promise<void> 
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Brevo test email failed: ${response.status} ${errorText}`);
+  }
+}
+
+/**
+ * Replace the contents of a Brevo list with exactly the given emails, so a
+ * subsequent campaign to that list reaches only those recipients:
+ *   1. empty the list,
+ *   2. upsert each contact (they must exist before they can be added),
+ *   3. add the emails to the list.
+ * Batch sizes here are well under Brevo's 150-email add limit.
+ */
+export async function syncBatchList(params: SyncBatchListParams): Promise<void> {
+  const { listId, emails, apiKey } = params;
+
+  const headers = {
+    "Content-Type": "application/json",
+    "api-key": apiKey,
+    accept: "application/json",
+  };
+
+  // 1. Empty the list (replace semantics). Brevo processes this asynchronously.
+  const removeResponse = await fetch(
+    `https://api.brevo.com/v3/contacts/lists/${listId}/contacts/remove`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ all: true }),
+    }
+  );
+
+  // 204 (nothing to remove) is fine; only real failures should throw.
+  if (!removeResponse.ok && removeResponse.status !== 204) {
+    const errorText = await removeResponse.text();
+    throw new Error(
+      `Brevo list empty failed: ${removeResponse.status} ${errorText}`
+    );
+  }
+
+  // 2. Upsert each contact. A 400 "contact already exists" is expected and safe
+  //    to ignore; updateEnabled also makes re-adds idempotent.
+  for (const email of emails) {
+    const createResponse = await fetch("https://api.brevo.com/v3/contacts", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ email, updateEnabled: true }),
+    });
+
+    if (!createResponse.ok && createResponse.status !== 400) {
+      const errorText = await createResponse.text();
+      throw new Error(
+        `Brevo contact upsert failed for ${email}: ${createResponse.status} ${errorText}`
+      );
+    }
+  }
+
+  // 3. Add the emails to the list.
+  const addResponse = await fetch(
+    `https://api.brevo.com/v3/contacts/lists/${listId}/contacts/add`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ emails }),
+    }
+  );
+
+  if (!addResponse.ok) {
+    const errorText = await addResponse.text();
+    throw new Error(
+      `Brevo add to list failed: ${addResponse.status} ${errorText}`
+    );
   }
 }

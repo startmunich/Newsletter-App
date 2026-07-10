@@ -6,6 +6,11 @@ const WHITE = "#ffffff";
 const LIGHT_GRAY = "#f5f5f5";
 const BORDER_GRAY = "#e0e0e0";
 
+// Past-event sections can get long and get cut off on mobile, so we only show
+// the latest few and link out to the member platform for the rest.
+const MAX_PAST_EVENTS = 3;
+const EVENTS_DASHBOARD_URL = "https://my.startmunich.de/dashboard/events";
+
 function normalizeSectionTitle(title: string): string {
   const normalized = title.toLowerCase().trim();
   if (normalized.includes("internal news") && !normalized.includes("event")) return "Internal News";
@@ -83,7 +88,16 @@ function renderSection(section: NewsletterSection): string {
 
   if (section.items.length === 0) return "";
 
-  const itemsHtml = section.items
+  // For past-event sections, only show the latest few events to keep the
+  // newsletter short (especially on mobile). Remaining events are linked via a
+  // "See more" button that points to the member platform.
+  const visibleItems =
+    isPastEventSection && section.items.length > MAX_PAST_EVENTS
+      ? section.items.slice(0, MAX_PAST_EVENTS)
+      : section.items;
+  const hiddenCount = section.items.length - visibleItems.length;
+
+  const itemsHtml = visibleItems
     .map((item) => {
       if (isInternalNews) {
         return renderInternalNewsItem(item);
@@ -93,12 +107,23 @@ function renderSection(section: NewsletterSection): string {
     })
     .join("");
 
+  const seeMoreHtml =
+    hiddenCount > 0
+      ? `
+          <tr>
+            <td style="padding: 20px 0 0 0; text-align: center;">
+              <a href="${EVENTS_DASHBOARD_URL}" target="_blank" style="display: inline-block; background-color: ${LIGHT_GRAY}; color: ${NAVY}; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 600; border: 1px solid ${BORDER_GRAY};">See ${hiddenCount} more event${hiddenCount === 1 ? "" : "s"} &rarr;</a>
+            </td>
+          </tr>`
+      : "";
+
   return `
     <tr>
       <td style="padding: 32px 20px 0 20px;">
         <h2 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 700; color: ${NAVY}; border-bottom: 3px solid ${MAGENTA}; padding-bottom: 8px;">${escapeHtml(section.title)}</h2>
         <table cellpadding="0" cellspacing="0" border="0" width="100%">
           ${itemsHtml}
+          ${seeMoreHtml}
         </table>
       </td>
     </tr>`;
@@ -109,14 +134,21 @@ export function renderNewsletterHtml(draft: NewsletterDraft): string {
 
   // Render selected cover image if available
   const coverImageHtml =
-    draft.coverImages && draft.coverImages.length > 0 && draft.selectedCoverImageIndex !== undefined
+    draft.coverImages && draft.coverImages.length > 0 && draft.selectedCoverImageIndex != null
       ? (() => {
           const selectedImage = draft.coverImages[draft.selectedCoverImageIndex];
-          if (selectedImage && selectedImage.imageBase64) {
+          // Prefer the hosted URL over inlined base64 — embedding base64 bloats
+          // the email HTML to megabytes and triggers Gmail's "message clipped".
+          const src = selectedImage?.imageUrl
+            ? escapeHtml(selectedImage.imageUrl)
+            : selectedImage?.imageBase64
+              ? `data:image/png;base64,${selectedImage.imageBase64}`
+              : "";
+          if (src) {
             return `
     <tr>
       <td style="padding: 24px 20px 0 20px; text-align: center;">
-        <img src="data:image/png;base64,${selectedImage.imageBase64}" alt="Newsletter cover" width="280" style="max-width: 280px; width: 50%; height: auto; border-radius: 12px; margin: 0 auto; display: block;" />
+        <img src="${src}" alt="Newsletter cover" width="280" style="max-width: 280px; width: 50%; height: auto; border-radius: 12px; margin: 0 auto; display: block;" />
       </td>
     </tr>`;
           }
@@ -166,7 +198,7 @@ export function renderNewsletterHtml(draft: NewsletterDraft): string {
     <tr>
       <td align="center" style="padding: 20px 10px;">
         <!-- Main container -->
-        <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; width: 100%; background-color: ${WHITE}; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <table cellpadding="0" cellspacing="0" border="0" width="700" style="max-width: 700px; width: 100%; background-color: ${WHITE}; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
 
           <!-- Header -->
           <tr>

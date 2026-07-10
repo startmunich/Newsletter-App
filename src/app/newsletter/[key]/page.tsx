@@ -18,6 +18,18 @@ export default function NewsletterDetailPage() {
   const [testEmail, setTestEmail] = useState("");
   const [sending, setSending] = useState(false);
 
+  // Batch send state (general modal)
+  type Recipient = { id: string; name: string; email: string; batch: string | null };
+  type SkippedMember = { id: string; name: string; batch: string | null };
+  const [availableBatches, setAvailableBatches] = useState<string[]>([]);
+  const [selectedBatches, setSelectedBatches] = useState<string[]>([]);
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [skipped, setSkipped] = useState<SkippedMember[]>([]);
+  const [loadingBatches, setLoadingBatches] = useState(false);
+  const [loadingRecipients, setLoadingRecipients] = useState(false);
+  const [recipientsError, setRecipientsError] = useState<string | null>(null);
+  const [recipientsLoaded, setRecipientsLoaded] = useState(false);
+
   // Cover image state
   const [coverImages, setCoverImages] = useState<CoverImage[]>([]);
   const [coverJobStatus, setCoverJobStatus] = useState<"idle" | "running" | "done" | "error">("idle");
@@ -95,11 +107,14 @@ export default function NewsletterDetailPage() {
 
   const handleCoverImageSelected = async (image: CoverImage) => {
     if (!preview) return;
+    // Toggle: clicking the already-selected image deselects it (no cover image).
+    const nextIndex =
+      preview.structured.selectedCoverImageIndex === image.index ? null : image.index;
     try {
       const response = await fetch(`/api/preview-data/${key}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectedCoverImageIndex: image.index }),
+        body: JSON.stringify({ selectedCoverImageIndex: nextIndex }),
       });
       if (!response.ok) throw new Error("Failed to save selection");
       const updated = await response.json();
@@ -134,18 +149,82 @@ export default function NewsletterDetailPage() {
     }
   };
 
+  // Load available batches when the general (send newsletter) modal opens.
+  useEffect(() => {
+    if (!showEmailModal || emailMode !== "general" || availableBatches.length > 0) return;
+    let cancelled = false;
+    setLoadingBatches(true);
+    (async () => {
+      try {
+        const res = await fetch("/api/members");
+        const data = await res.json().catch(() => null);
+        if (!cancelled && res.ok && Array.isArray(data?.batches)) {
+          setAvailableBatches(data.batches);
+        }
+      } catch {
+        /* transient */
+      } finally {
+        if (!cancelled) setLoadingBatches(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showEmailModal, emailMode, availableBatches.length]);
+
+  const toggleBatch = (batch: string) => {
+    setRecipientsLoaded(false);
+    setRecipients([]);
+    setSkipped([]);
+    setSelectedBatches((prev) =>
+      prev.includes(batch) ? prev.filter((b) => b !== batch) : [...prev, batch]
+    );
+  };
+
+  const handleLoadRecipients = async () => {
+    if (selectedBatches.length === 0) return;
+    setLoadingRecipients(true);
+    setRecipientsError(null);
+    try {
+      const res = await fetch(`/api/members?batches=${encodeURIComponent(selectedBatches.join(","))}`);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Failed to load recipients");
+      setRecipients(data.members || []);
+      setSkipped(data.skipped || []);
+      setRecipientsLoaded(true);
+    } catch (error) {
+      setRecipientsError(error instanceof Error ? error.message : "Failed to load recipients");
+    } finally {
+      setLoadingRecipients(false);
+    }
+  };
+
+  const handleCopyEmails = async () => {
+    const emails = recipients.map((r) => r.email).join(", ");
+    try {
+      await navigator.clipboard.writeText(emails);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
   const handleSendGeneral = async () => {
+    if (selectedBatches.length === 0 || !recipientsLoaded || recipients.length === 0) return;
     setSending(true);
     try {
       const response = await fetch("/api/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key }),
+        body: JSON.stringify({ key, batches: selectedBatches }),
       });
 
       const data = await response.json().catch(() => null);
       if (response.ok) {
-        alert("Newsletter sent successfully!");
+        alert(
+          `Newsletter sent successfully${
+            data?.recipientCount ? ` to ${data.recipientCount} recipients` : ""
+          }!`
+        );
         setShowEmailModal(false);
         const r = await fetch(`/api/preview-data/${key}`);
         if (r.ok) setPreview(await r.json());
@@ -278,7 +357,8 @@ export default function NewsletterDetailPage() {
                         <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">{typeLabel}</span>
                         <button
                           onClick={() => handleCoverImageSelected(image)}
-                          className={`relative rounded-lg overflow-hidden border-2 transition-all ${
+                          title={isSelected ? "Click to deselect" : "Click to select"}
+                          className={`group relative rounded-lg overflow-hidden border-2 transition-all ${
                             isSelected ? "border-[#D0006F] ring-2 ring-[#D0006F]/30" : "border-[#2a2a42] hover:border-[#4a4a62]"
                           }`}
                         >
@@ -289,7 +369,8 @@ export default function NewsletterDetailPage() {
                           />
                           {isSelected && (
                             <span className="absolute top-2 right-2 bg-[#D0006F] text-white text-xs font-semibold px-2 py-0.5 rounded">
-                              ✓
+                              <span className="group-hover:hidden">✓</span>
+                              <span className="hidden group-hover:inline">✕</span>
                             </span>
                           )}
                         </button>
@@ -339,7 +420,11 @@ export default function NewsletterDetailPage() {
       {/* Email Modal */}
       {showEmailModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[#1a1a2e] border border-[#2a2a42] rounded-lg p-8 max-w-md w-full mx-4">
+          <div
+            className={`bg-[#1a1a2e] border border-[#2a2a42] rounded-lg p-8 w-full mx-4 ${
+              emailMode === "test" ? "max-w-md" : "max-w-lg"
+            }`}
+          >
             <h3 className="text-lg font-bold text-[#f1f1f5] mb-4">
               {emailMode === "test" ? "Send Test Email" : "Send Newsletter"}
             </h3>
@@ -355,9 +440,93 @@ export default function NewsletterDetailPage() {
                 />
               </>
             ) : (
-              <p className="text-[#a0a0b8] text-sm mb-4">
-                Send this newsletter to all subscribers. This will mark the draft as sent.
-              </p>
+              <div className="mb-4">
+                <p className="text-[#a0a0b8] text-sm mb-3">
+                  Select the member batches to send this newsletter to. Emails are derived from
+                  member names ({"<initial>.<surname>@startmunich.de"}).
+                </p>
+
+                {/* Batch selector */}
+                <div className="mb-4">
+                  <div className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider mb-2">
+                    Batches
+                  </div>
+                  {loadingBatches ? (
+                    <p className="text-[#606078] text-sm">Loading batches…</p>
+                  ) : availableBatches.length === 0 ? (
+                    <p className="text-[#606078] text-sm">No batches available.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                      {availableBatches.map((batch) => {
+                        const checked = selectedBatches.includes(batch);
+                        return (
+                          <label
+                            key={batch}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm transition-colors ${
+                              checked
+                                ? "bg-[#D0006F]/15 border-[#D0006F] text-[#f1f1f5]"
+                                : "bg-[#2a2a42] border-[#3a3a52] text-[#a0a0b8] hover:border-[#4a4a62]"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleBatch(batch)}
+                              className="accent-[#D0006F]"
+                            />
+                            {batch}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Preview recipients */}
+                <button
+                  onClick={handleLoadRecipients}
+                  disabled={selectedBatches.length === 0 || loadingRecipients}
+                  className="px-4 py-1.5 bg-[#2a2a42] text-[#f1f1f5] text-sm font-medium rounded-lg hover:bg-[#3a3a52] disabled:opacity-40 transition-colors mb-3"
+                >
+                  {loadingRecipients ? "Loading…" : "Preview recipients"}
+                </button>
+
+                {recipientsError && (
+                  <p className="text-red-400 text-sm mb-3">{recipientsError}</p>
+                )}
+
+                {recipientsLoaded && (
+                  <div className="mb-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-[#f1f1f5] font-semibold">
+                        {recipients.length} recipient{recipients.length === 1 ? "" : "s"}
+                      </span>
+                      {recipients.length > 0 && (
+                        <button
+                          onClick={handleCopyEmails}
+                          className="text-xs text-[#D0006F] hover:text-[#ff4db8] font-medium"
+                        >
+                          Copy all emails
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-48 overflow-y-auto rounded-lg border border-[#2a2a42] divide-y divide-[#2a2a42]">
+                      {recipients.map((r) => (
+                        <div key={r.id} className="flex items-center justify-between px-3 py-1.5 text-sm">
+                          <span className="text-[#a0a0b8] truncate mr-2">{r.name}</span>
+                          <span className="text-[#f1f1f5] font-mono text-xs truncate">{r.email}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {skipped.length > 0 && (
+                      <p className="text-amber-400/90 text-xs mt-2">
+                        ⚠ {skipped.length} member{skipped.length === 1 ? "" : "s"} skipped (no email
+                        could be derived): {skipped.map((s) => s.name).join(", ")}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
             <div className="flex gap-4">
               <button
@@ -368,10 +537,19 @@ export default function NewsletterDetailPage() {
               </button>
               <button
                 onClick={emailMode === "test" ? handleSendTest : handleSendGeneral}
-                disabled={sending || (emailMode === "test" && !testEmail.trim())}
+                disabled={
+                  sending ||
+                  (emailMode === "test"
+                    ? !testEmail.trim()
+                    : !recipientsLoaded || recipients.length === 0)
+                }
                 className="flex-1 px-4 py-2 bg-[#D0006F] text-white font-medium rounded-lg hover:bg-[#a80055] disabled:opacity-50 transition-colors"
               >
-                {sending ? "Sending..." : "Send"}
+                {sending
+                  ? "Sending..."
+                  : emailMode === "general" && recipientsLoaded
+                    ? `Send to ${recipients.length}`
+                    : "Send"}
               </button>
             </div>
           </div>
