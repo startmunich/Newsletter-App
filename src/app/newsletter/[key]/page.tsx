@@ -17,6 +17,7 @@ export default function NewsletterDetailPage() {
   const [emailMode, setEmailMode] = useState<"test" | "general">("test");
   const [testEmail, setTestEmail] = useState("");
   const [sending, setSending] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
 
   // Batch send state (general modal)
   type Recipient = { id: string; name: string; email: string; batch: string | null };
@@ -29,6 +30,13 @@ export default function NewsletterDetailPage() {
   const [loadingRecipients, setLoadingRecipients] = useState(false);
   const [recipientsError, setRecipientsError] = useState<string | null>(null);
   const [recipientsLoaded, setRecipientsLoaded] = useState(false);
+
+  // Alpha notice state
+  const DEFAULT_ALPHA_TEXT =
+    "This newsletter is still in alpha. If you notice anything off or run into issues, please reach out to XXX.";
+  const [alphaEnabled, setAlphaEnabled] = useState(true);
+  const [alphaText, setAlphaText] = useState(DEFAULT_ALPHA_TEXT);
+  const [alphaSaving, setAlphaSaving] = useState(false);
 
   // Cover image state
   const [coverImages, setCoverImages] = useState<CoverImage[]>([]);
@@ -85,6 +93,12 @@ export default function NewsletterDetailPage() {
           const data: PreviewState = await response.json();
           setPreview(data);
 
+          // Initialize alpha notice controls from the stored draft (default on).
+          if (data.structured.alphaNotice) {
+            setAlphaEnabled(data.structured.alphaNotice.enabled);
+            setAlphaText(data.structured.alphaNotice.text || DEFAULT_ALPHA_TEXT);
+          }
+
           // If cover images already exist, show them
           if (data.structured.coverImages && data.structured.coverImages.length > 0) {
             setCoverImages(data.structured.coverImages);
@@ -121,6 +135,24 @@ export default function NewsletterDetailPage() {
       setPreview(updated);
     } catch (error) {
       console.error("Failed to select cover image:", error);
+    }
+  };
+
+  const handleSaveAlphaNotice = async (next: { enabled: boolean; text: string }) => {
+    setAlphaSaving(true);
+    try {
+      const response = await fetch(`/api/preview-data/${key}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alphaNotice: next }),
+      });
+      if (!response.ok) throw new Error("Failed to save alpha notice");
+      const updated = await response.json();
+      setPreview(updated);
+    } catch (error) {
+      console.error("Failed to save alpha notice:", error);
+    } finally {
+      setAlphaSaving(false);
     }
   };
 
@@ -321,6 +353,34 @@ export default function NewsletterDetailPage() {
                 </Link>
               </div>
 
+              {/* Alpha Notice Section — toggle only; text is edited in the edit view */}
+              <div className="mb-8 max-w-2xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-[#f1f1f5]">Alpha Notice</h2>
+                    <p className="text-[#a0a0b8] text-xs mt-1">
+                      Show the alpha banner at the top of the newsletter. Edit its text in the edit view.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <span className="text-sm text-[#a0a0b8]">
+                      {alphaSaving ? "Saving…" : alphaEnabled ? "Shown" : "Hidden"}
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={alphaEnabled}
+                      disabled={alphaSaving}
+                      onChange={(e) => {
+                        const enabled = e.target.checked;
+                        setAlphaEnabled(enabled);
+                        handleSaveAlphaNotice({ enabled, text: alphaText });
+                      }}
+                      className="w-4 h-4 accent-[#D0006F] cursor-pointer"
+                    />
+                  </label>
+                </div>
+              </div>
+
               {/* Cover Image Section — always visible */}
               <div className="mb-8 max-w-2xl">
                 <div className="flex items-center justify-between mb-3">
@@ -351,10 +411,10 @@ export default function NewsletterDetailPage() {
                 <div className="grid grid-cols-3 gap-4">
                   {coverImages.map((image) => {
                     const isSelected = selectedIndex === image.index;
-                    const typeLabel = image.index === 0 ? "Meme" : image.index === 1 ? "Photo" : "Creative";
+                    const typeLabel = image.label || `News ${image.index + 1}`;
                     return (
                       <div key={image.index} className="flex flex-col gap-1">
-                        <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">{typeLabel}</span>
+                        <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider line-clamp-1" title={typeLabel}>{typeLabel}</span>
                         <button
                           onClick={() => handleCoverImageSelected(image)}
                           title={isSelected ? "Click to deselect" : "Click to select"}
@@ -380,9 +440,9 @@ export default function NewsletterDetailPage() {
 
                   {/* Skeleton placeholders while generating */}
                   {isGenerating &&
-                    ["Meme", "Photo", "Creative"].slice(coverImages.length).map((label, i) => (
+                    Array.from({ length: Math.max(0, 3 - coverImages.length) }).map((_, i) => (
                       <div key={`skeleton-${i}`} className="flex flex-col gap-1">
-                        <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">{label}</span>
+                        <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">News {coverImages.length + i + 1}</span>
                         <div className="w-full aspect-square rounded-lg bg-[#2a2a42] animate-pulse flex items-center justify-center">
                           <span className="text-[#3a3a52] text-xs">Generating…</span>
                         </div>
@@ -391,9 +451,9 @@ export default function NewsletterDetailPage() {
 
                   {/* Empty state: never generated */}
                   {coverJobStatus === "idle" && coverImages.length === 0 &&
-                    ["Meme", "Photo", "Creative"].map((label, i) => (
+                    Array.from({ length: 3 }).map((_, i) => (
                       <div key={`empty-${i}`} className="flex flex-col gap-1">
-                        <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">{label}</span>
+                        <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">News {i + 1}</span>
                         <div className="w-full aspect-square rounded-lg border-2 border-dashed border-[#2a2a42] flex items-center justify-center">
                           <span className="text-[#3a3a52] text-xs">No image</span>
                         </div>
@@ -405,13 +465,53 @@ export default function NewsletterDetailPage() {
 
             {/* Right: Newsletter Preview */}
             <div className="w-1/2 border-l border-[#2a2a42] overflow-y-auto p-8 bg-[#0a0a14]">
-              <h2 className="text-lg font-bold text-[#f1f1f5] mb-4">Preview</h2>
-              <div
-                className="bg-white rounded-lg overflow-hidden shadow-lg p-6 prose prose-sm max-w-none h-[calc(100vh-140px)] overflow-y-auto"
-                style={{ userSelect: "text", WebkitUserSelect: "text" }}
-              >
-                <div dangerouslySetInnerHTML={{ __html: preview.html }} />
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-[#f1f1f5]">Preview</h2>
+                {/* Device toggle */}
+                <div className="flex items-center gap-1 bg-[#1a1a2e] border border-[#2a2a42] rounded-lg p-1">
+                  <button
+                    onClick={() => setPreviewDevice("desktop")}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                      previewDevice === "desktop"
+                        ? "bg-[#D0006F] text-white"
+                        : "text-[#a0a0b8] hover:text-[#f1f1f5]"
+                    }`}
+                  >
+                    Desktop
+                  </button>
+                  <button
+                    onClick={() => setPreviewDevice("mobile")}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                      previewDevice === "mobile"
+                        ? "bg-[#D0006F] text-white"
+                        : "text-[#a0a0b8] hover:text-[#f1f1f5]"
+                    }`}
+                  >
+                    Mobile
+                  </button>
+                </div>
               </div>
+
+              {previewDevice === "desktop" ? (
+                <div
+                  className="bg-white rounded-lg overflow-hidden shadow-lg p-6 prose prose-sm max-w-none h-[calc(100vh-140px)] overflow-y-auto"
+                  style={{ userSelect: "text", WebkitUserSelect: "text" }}
+                >
+                  <div dangerouslySetInnerHTML={{ __html: preview.html }} />
+                </div>
+              ) : (
+                // Mobile: render inside a 375px-wide iframe so the newsletter's own
+                // responsive @media rules fire and show the true phone layout.
+                <div className="flex justify-center h-[calc(100vh-140px)] overflow-y-auto">
+                  <iframe
+                    src={`/api/preview/${key}`}
+                    title="Mobile preview"
+                    sandbox="allow-same-origin"
+                    className="bg-white rounded-[24px] shadow-lg border-[6px] border-[#1a1a2e]"
+                    style={{ width: "375px", minWidth: "375px", height: "812px" }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}

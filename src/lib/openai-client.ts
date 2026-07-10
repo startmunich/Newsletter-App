@@ -346,26 +346,53 @@ export async function generateMultipleImages(
   return results;
 }
 
+// Appended to every cover prompt so the image model knows it should be a cover
+// image for the given news in a newsletter.
+const COVER_IMAGE_CONTEXT =
+  "This image should be a cover image for the START Munich newsletter. START Munich is a student club that focus on entrepreneurship, startups, and innovation. The image should be visually appealing and relevant to the news story it represents. The image should not contain any text or logos (except on clothing or merchandise). It should be suitable for use as a newsletter cover image.";
+
+
+
 export function buildDefaultCoverPrompt(context: {
   month: string;
   subject: string;
   intro: string;
-  internalNewsItems?: Array<{ title: string; summary: string }>;
-}): string[] {
-  const items = context.internalNewsItems || [];
-  const top = items[0];
+  sections?: Array<{ title: string; items: Array<{ title: string; summary: string }> }>;
+}): CoverPrompt[] {
+  // Fallback when the AI selection call fails: take the first few news items
+  // across the sections and build a short prompt for each.
+  const newsItems = (context.sections || [])
+    .flatMap((section) => section.items)
+    .slice(0, 3);
 
-  if (top) {
-    return [
-      `Real editorial cover photo for a startup newsletter. Focus on this key topic: "${top.title}". Context: ${top.summary}. Show one authentic moment with real people in a startup setting, no text overlays.`,
-    ];
+  if (newsItems.length > 0) {
+    return newsItems.map((item) => ({
+      label: item.title,
+      prompt: `${item.title}. ${item.summary} ${COVER_IMAGE_CONTEXT}`,
+    }));
   }
 
   return [
-    `Real editorial cover photo for a startup newsletter in ${context.month}. Subject: ${context.subject}. Intro context: ${context.intro}. Show one authentic moment with real people, no text overlays.`,
+    {
+      label: context.subject || context.month,
+      prompt: `${context.subject || `START Munich newsletter ${context.month}`}. ${COVER_IMAGE_CONTEXT}`,
+    },
   ];
 }
 
+export interface CoverPrompt {
+  /** Short title of the news story this image represents (for UI labels). */
+  label: string;
+  /** The DALL-E image prompt describing the news. */
+  prompt: string;
+}
+
+/**
+ * Uses a GPT call to pick the top 3 most important news stories from the
+ * newsletter, then returns one short image prompt per story. Every image uses
+ * the same style (no meme/photo/creative themes) — the prompt just describes
+ * the news and notes it is for the START Munich newsletter.
+ */
 export async function generateCoverPromptFromDraftData(
   context: {
     month: string;
@@ -374,12 +401,12 @@ export async function generateCoverPromptFromDraftData(
     sections: Array<{ title: string; items: Array<{ title: string; summary: string }> }>;
   },
   apiKey: string
-): Promise<[string, string, string]> {
+): Promise<CoverPrompt[]> {
   const compactSections = context.sections
-    .slice(0, 4)
+    .slice(0, 6)
     .map((section) => ({
       title: section.title,
-      items: section.items.slice(0, 3).map((item) => ({ title: item.title, summary: item.summary })),
+      items: section.items.slice(0, 5).map((item) => ({ title: item.title, summary: item.summary })),
     }));
 
   const requestBody = {
@@ -388,11 +415,11 @@ export async function generateCoverPromptFromDraftData(
       {
         role: "system",
         content:
-          "You write DALL-E image prompts for a newsletter cover. Pick the single most important story from the input and create 3 prompt variants. Each prompt must end with: 'This image is for the START Munich newsletter — a Munich-based student club for startups and aspiring entrepreneurs.' Return ONLY valid JSON with keys: meme, photo, creative.",
+          "You select the most important news from a newsletter and write short DALL-E image prompts for them. Keep each prompt as short as possible: just describe the news. Return ONLY valid JSON.",
       },
       {
         role: "user",
-        content: `Create 3 cover image prompts based on this newsletter data:\n\n${JSON.stringify(
+        content: `From this newsletter data, pick the 3 most important news stories and write one short cover image prompt for each:\n\n${JSON.stringify(
           {
             month: context.month,
             subject: context.subject,
@@ -401,7 +428,7 @@ export async function generateCoverPromptFromDraftData(
           },
           null,
           2
-        )}\n\nReturn JSON with exactly these 3 keys:\n- meme: funny, relatable startup humor scene based on the key story (candid photo style, no text)\n- photo: authentic documentary-style editorial photo of the key story (real people, real place, natural light, no text)\n- creative: unexpected artistic reinterpretation of the key story (surreal, conceptual, visually striking, no text)\n\nMax 60 words per prompt. No text overlays in any image.`,
+        )}\n\nReturn JSON: { "news": [ { "label": "<short news title>", "prompt": "<short prompt describing the news>" }, ... ] } with exactly 3 items. Each prompt must be as short as possible and only describe the news.`,
       },
     ],
     response_format: { type: "json_object" },
@@ -423,33 +450,43 @@ export async function generateCoverPromptFromDraftData(
 
   const data = await response.json();
   const parsed = JSON.parse(extractResponseText(data));
-  return [
-    String(parsed.meme || "").trim(),
-    String(parsed.photo || "").trim(),
-    String(parsed.creative || "").trim(),
-  ];
+  const news: unknown[] = Array.isArray(parsed.news) ? parsed.news : [];
+
+  return news
+    .map((n): CoverPrompt => {
+      const item = (n ?? {}) as { label?: unknown; prompt?: unknown };
+      const rawPrompt = String(item.prompt || "").trim();
+      return {
+        label: String(item.label || "").trim(),
+        // Append the START Munich context so the image knows what the club is
+        // and that it is a cover image for the given news.
+        prompt: rawPrompt ? `${rawPrompt} ${COVER_IMAGE_CONTEXT}` : "",
+      };
+    })
+    .filter((p) => p.prompt.length > 0)
+    .slice(0, 3);
 }
 
 export async function generateCoverImages(
-  prompts: string[],
+  prompts: CoverPrompt[],
   apiKey: string,
-  onImage?: (image: { prompt: string; imageBase64: string; index: number }) => void,
-): Promise<Array<{ prompt: string; imageBase64: string }>> {
-  const results: Array<{ prompt: string; imageBase64: string } | null> = new Array(prompts.length).fill(null);
+  onImage?: (image: { prompt: string; imageBase64: string; index: number; label: string }) => void,
+): Promise<Array<{ prompt: string; imageBase64: string; label: string }>> {
+  const results: Array<{ prompt: string; imageBase64: string; label: string } | null> = new Array(prompts.length).fill(null);
 
   await Promise.all(
-    prompts.map(async (prompt, i) => {
+    prompts.map(async ({ prompt, label }, i) => {
       const imageBase64 = await generateMemeImage(prompt, apiKey);
       if (imageBase64) {
-        results[i] = { prompt, imageBase64 };
-        onImage?.({ prompt, imageBase64, index: i });
+        results[i] = { prompt, imageBase64, label };
+        onImage?.({ prompt, imageBase64, index: i, label });
       } else {
         console.warn(`Cover image ${i + 1}/${prompts.length} generation returned null`);
       }
     })
   );
 
-  return results.filter((r): r is { prompt: string; imageBase64: string } => r !== null);
+  return results.filter((r): r is { prompt: string; imageBase64: string; label: string } => r !== null);
 }
 
 function extractResponseText(data: Record<string, unknown>): string {

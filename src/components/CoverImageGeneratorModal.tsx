@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CoverImage } from "@/lib/types";
+import type { CoverPrompt } from "@/lib/openai-client";
 
 interface CoverImageGeneratorModalProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ export default function CoverImageGeneratorModal({
   onJobStarted,
 }: CoverImageGeneratorModalProps) {
   const [phase, setPhase] = useState<Phase>("prompt");
-  const [prompts, setPrompts] = useState<[string, string, string]>(["", "", ""]);
+  const [prompts, setPrompts] = useState<CoverPrompt[]>([]);
   const [promptLoading, setPromptLoading] = useState(false);
   const [images, setImages] = useState<CoverImage[]>([]);
   const [jobDone, setJobDone] = useState(false);
@@ -42,8 +43,7 @@ export default function CoverImageGeneratorModal({
       .then((res) => res.json())
       .then((data) => {
         if (data.prompts && Array.isArray(data.prompts)) {
-          const p = data.prompts as string[];
-          setPrompts([p[0] || "", p[1] || "", p[2] || ""]);
+          setPrompts(data.prompts as CoverPrompt[]);
         }
       })
       .catch(() => {
@@ -150,24 +150,29 @@ export default function CoverImageGeneratorModal({
         {phase === "prompt" && (
           <>
             <p className="text-xs text-[#606078] mb-4">
-              Edit any prompt below to customize the corresponding image. Generation runs in the background.
+              One image is generated per top news story. Edit any prompt below to customize its image. Generation runs in the background.
             </p>
 
-            {(["Meme", "Photo", "Creative"] as const).map((label, idx) => (
-              <div key={label} className="mb-4">
+            {promptLoading && prompts.length === 0 && (
+              <p className="text-sm text-[#606078] mb-4">Loading news prompts…</p>
+            )}
+
+            {prompts.map((cp, idx) => (
+              <div key={idx} className="mb-4">
                 <label className="block text-sm font-semibold text-[#a0a0b8] uppercase tracking-wider mb-2">
-                  {label}
+                  {cp.label || `News ${idx + 1}`}
                 </label>
                 <textarea
-                  value={prompts[idx]}
+                  value={cp.prompt}
                   onChange={(e) => {
-                    const updated = [prompts[0], prompts[1], prompts[2]] as [string, string, string];
-                    updated[idx] = e.target.value;
+                    const updated = prompts.map((p, i) =>
+                      i === idx ? { ...p, prompt: e.target.value } : p
+                    );
                     setPrompts(updated);
                   }}
                   disabled={promptLoading}
-                  rows={4}
-                  placeholder={promptLoading ? "Loading prompt..." : `Describe the ${label.toLowerCase()} cover image...`}
+                  rows={3}
+                  placeholder={promptLoading ? "Loading prompt..." : "Describe the news for this cover image..."}
                   className="w-full px-4 py-3 bg-[#2a2a42] border border-[#3a3a52] rounded-lg text-[#f1f1f5] placeholder-[#606078] focus:outline-none focus:border-[#D0006F] resize-y"
                 />
               </div>
@@ -182,7 +187,7 @@ export default function CoverImageGeneratorModal({
               </button>
               <button
                 onClick={handleStartGeneration}
-                disabled={promptLoading || !prompts.every(p => p.trim().length > 0)}
+                disabled={promptLoading || prompts.length === 0 || !prompts.every(p => p.prompt.trim().length > 0)}
                 className="px-6 py-2 bg-[#D0006F] hover:bg-[#a80055] text-white font-semibold rounded-lg disabled:opacity-50 transition-colors"
               >
                 Generate Images

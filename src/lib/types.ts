@@ -23,6 +23,7 @@ export interface CoverImage {
   imageBase64: string;
   imageUrl?: string;
   index: number; // 0, 1, or 2
+  label?: string; // short title of the news story this image represents
 }
 
 export interface CoverImageJob {
@@ -40,6 +41,11 @@ export interface InternalNewsMeme {
   error?: string;
 }
 
+export interface AlphaNotice {
+  enabled: boolean;
+  text: string;
+}
+
 export interface NewsletterDraft {
   month: string;
   subject: string;
@@ -49,6 +55,7 @@ export interface NewsletterDraft {
   clarificationNeeded: boolean;
   clarificationQuestion: string;
   sections: NewsletterSection[];
+  alphaNotice?: AlphaNotice;
   internalNewsMeme?: InternalNewsMeme;
   coverImages?: CoverImage[]; // 3 generated cover images for user selection
   selectedCoverImageIndex?: number; // 0, 1, or 2 - which image is selected

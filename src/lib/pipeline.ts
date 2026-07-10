@@ -9,6 +9,7 @@ import {
   generateCoverImages,
   generateCoverPromptFromDraftData,
   buildDefaultCoverPrompt,
+  type CoverPrompt,
 } from "./openai-client";
 import { compressPdf } from "./nutrient";
 import { DRAFT_SYSTEM_PROMPT, buildDraftUserPrompt } from "./prompts";
@@ -249,7 +250,7 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
 
     // Start cover image generation in background automatically
     const coverJobId = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    let coverPrompts: string[];
+    let coverPrompts: CoverPrompt[];
     try {
       coverPrompts = await generateCoverPromptFromDraftData(
         {
@@ -266,11 +267,11 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
         month: draft.month,
         subject: draft.subject,
         intro: draft.intro,
-        internalNewsItems: [],
+        sections: draft.sections || [],
       });
     }
 
-    store.createCoverImageJob(coverJobId, previewKey, coverPrompts[0]);
+    store.createCoverImageJob(coverJobId, previewKey, coverPrompts[0]?.prompt ?? "");
     store.updateCoverImageJob(coverJobId, { status: "running" });
     previewState.coverImageJobId = coverJobId;
 
@@ -287,6 +288,7 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
             prompt: image.prompt,
             imageBase64: image.imageBase64,
             index: image.index,
+            label: image.label,
           });
         });
         const currentPreview = await store.getPreview(previewKey);
@@ -295,6 +297,7 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
             prompt: img.prompt,
             imageBase64: img.imageBase64,
             index,
+            label: img.label,
           }));
           currentPreview.updatedAt = new Date();
           await store.storePreview(previewKey, currentPreview);

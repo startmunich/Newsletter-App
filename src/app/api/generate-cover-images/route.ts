@@ -4,6 +4,7 @@ import {
   generateCoverImages,
   buildDefaultCoverPrompt,
   generateCoverPromptFromDraftData,
+  type CoverPrompt,
 } from "@/lib/openai-client";
 
 export const dynamic = "force-dynamic";
@@ -41,21 +42,21 @@ export async function GET(request: NextRequest) {
     console.error("GET cover prompt AI generation failed, falling back:", error);
   }
 
-  const fallbackPrompt = buildDefaultCoverPrompt({
+  const fallbackPrompts = buildDefaultCoverPrompt({
     month: preview.structured.month || preview.monthGenerated || "",
     subject: preview.structured.subject || "",
     intro: preview.structured.intro || "",
-    internalNewsItems: [],
-  })[0];
+    sections: preview.structured.sections || [],
+  });
 
-  return NextResponse.json({ prompts: [fallbackPrompt, fallbackPrompt, fallbackPrompt] });
+  return NextResponse.json({ prompts: fallbackPrompts });
 }
 
 // POST: start a background cover image generation job, return jobId immediately
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { previewKey, prompt, prompts } = body;
+    const { previewKey, prompts } = body;
 
     if (!previewKey || typeof previewKey !== "string") {
       return NextResponse.json({ error: "previewKey is required" }, { status: 400 });
@@ -71,16 +72,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Preview not found" }, { status: 404 });
     }
 
-    let effectivePrompt: string[];
+    let effectivePrompt: CoverPrompt[];
 
     if (Array.isArray(prompts) && prompts.length > 0) {
-      const filtered = prompts.map((p: unknown) => (typeof p === "string" ? p.trim() : "")).filter(Boolean);
+      const filtered = prompts
+        .map((p: unknown): CoverPrompt => {
+          const item = (p ?? {}) as { label?: unknown; prompt?: unknown };
+          return {
+            label: typeof item.label === "string" ? item.label.trim() : "",
+            prompt: typeof item.prompt === "string" ? item.prompt.trim() : "",
+          };
+        })
+        .filter((p) => p.prompt.length > 0);
       if (filtered.length === 0) {
-        return NextResponse.json({ error: "prompts array must contain at least one non-empty string" }, { status: 400 });
+        return NextResponse.json({ error: "prompts array must contain at least one item with a non-empty prompt" }, { status: 400 });
       }
       effectivePrompt = filtered;
-    } else if (typeof prompt === "string" && prompt.trim().length > 0) {
-      effectivePrompt = [prompt.trim()];
     } else {
       effectivePrompt = await generateCoverPromptFromDraftData(
         {
@@ -94,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     const jobId = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    store.createCoverImageJob(jobId, previewKey, effectivePrompt[0]);
+    store.createCoverImageJob(jobId, previewKey, effectivePrompt[0]?.prompt ?? "");
     store.updateCoverImageJob(jobId, { status: "running" });
 
     // Fire and forget: generate images in the background, storing progress on the job
@@ -108,6 +115,7 @@ export async function POST(request: NextRequest) {
               prompt: image.prompt,
               imageBase64: image.imageBase64,
               index: image.index,
+              label: image.label,
             });
           }
         );
@@ -119,6 +127,7 @@ export async function POST(request: NextRequest) {
             prompt: img.prompt,
             imageBase64: img.imageBase64,
             index,
+            label: img.label,
           }));
           currentPreview.updatedAt = new Date();
           await store.storePreview(previewKey, currentPreview);

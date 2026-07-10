@@ -9,6 +9,11 @@ CRITICAL — be concrete and specific:
 - Describe what actually happened, not a meta-summary of the fact that something happened.
 - Never use vague filler like "updates to our structure", "various improvements", or "exciting developments".
 
+TONE — light and friendly, like a Slack message:
+- Add at most one emoji per news item, at the END of the item title, and only when a clearly fitting one exists (e.g. "START Goes Stockholm 🇸🇪", "Europe Embodied reached 1,000+ participants 🤖"). Pick an emoji that matches the specific content — a country/city → its flag, robotics → 🤖, sponsorship/deal → 🤝, hiring/new members → 👋, milestone/numbers → 📈, fundraising/pitch → 💸, hackathon → 💻, party → 🎉. If nothing clearly fits, use no emoji rather than a generic one.
+- Do NOT put emoji anywhere else — not in the intro, summaries, subject, preheader, or section titles. Keep emoji out of body text entirely.
+- Keep it tasteful: don't let emoji replace concrete facts.
+
 If a source-backed topic is important but ambiguous enough that publishing it would require guessing, set clarificationNeeded to true and write one concise clarificationQuestion. Do not ask about non-blocking details. Never include sensitive financial data. Public-facing ticket prices are allowed, but omit internal revenue, profit, budget, sponsorship amounts, cash balances, runway, costs, margins.`;
 
 export function buildDraftUserPrompt(params: {
@@ -61,6 +66,11 @@ For event items (sections 2-5):
 - Use a relevant tag (e.g., "Workshop", "Social", "Networking", "Panel", "Hackathon")
 - If an Image URL is provided in the event data, use it for imageUrl and the event name for imageAlt
 - If no Image URL is provided, leave imageUrl and imageAlt empty
+
+For lists inside a summary (e.g. a breakdown by department or team): format each entry on its own line prefixed with "- ". For example:
+- Events — Tim, Justin, Lina
+- People — Killian, Sonja
+Only use this bullet format for actual enumerations; keep normal prose as prose.
 
 For the subject line: Make it catchy and relevant to the month's highlights.
 For the preheader: A short teaser sentence (max 100 chars).

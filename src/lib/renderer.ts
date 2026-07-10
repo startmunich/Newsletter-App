@@ -11,6 +11,11 @@ const BORDER_GRAY = "#e0e0e0";
 const MAX_PAST_EVENTS = 3;
 const EVENTS_DASHBOARD_URL = "https://my.startmunich.de/dashboard/events";
 
+// Default text for the alpha notice banner. Shown by default; text and
+// visibility are configurable per newsletter on the overview page.
+export const DEFAULT_ALPHA_NOTICE_TEXT =
+  "This newsletter is still in alpha. If you notice anything off or run into issues, please reach out to XXX.";
+
 function normalizeSectionTitle(title: string): string {
   const normalized = title.toLowerCase().trim();
   if (normalized.includes("internal news") && !normalized.includes("event")) return "Internal News";
@@ -30,12 +35,53 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#039;");
 }
 
+// A summary may contain a bullet list where each item is on its own line
+// prefixed with "- " (see the draft prompt). Render such lines as a real <ul>
+// and everything else as prose paragraphs, so lists don't collapse into one
+// run-on sentence. Returns email-safe HTML (each segment individually escaped).
+function renderSummaryHtml(summary: string, color: string): string {
+  const lines = summary.split("\n");
+  const segments: string[] = [];
+  let bulletBuffer: string[] = [];
+
+  const flushBullets = () => {
+    if (bulletBuffer.length === 0) return;
+    const items = bulletBuffer
+      .map(
+        (b) =>
+          `<li style="margin: 0 0 4px 0;">${escapeHtml(b)}</li>`
+      )
+      .join("");
+    segments.push(
+      `<ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; color: ${color};">${items}</ul>`
+    );
+    bulletBuffer = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const bulletMatch = line.match(/^[-*•]\s+(.*)$/);
+    if (bulletMatch) {
+      bulletBuffer.push(bulletMatch[1]);
+    } else {
+      flushBullets();
+      segments.push(
+        `<p style="margin: 0; font-size: 14px; line-height: 1.5; color: ${color};">${escapeHtml(line)}</p>`
+      );
+    }
+  }
+  flushBullets();
+
+  return segments.join("");
+}
+
 function renderInternalNewsItem(item: NewsletterItem): string {
   return `
     <tr>
       <td style="padding: 16px 0; border-bottom: 1px solid ${BORDER_GRAY};">
         <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: ${NAVY};">${escapeHtml(item.title)}</h3>
-        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #333333;">${escapeHtml(item.summary)}</p>
+        ${renderSummaryHtml(item.summary, "#333333")}
       </td>
     </tr>`;
 }
@@ -55,28 +101,26 @@ function renderEventItem(item: NewsletterItem, isPastEvent: boolean = false): st
     ? `<a href="${escapeHtml(item.url)}" target="_blank" style="display: inline-block; background-color: ${MAGENTA}; color: ${WHITE}; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 600; margin-top: 10px;">Register &rarr;</a>`
     : "";
 
-  const textCell = `
-    <td valign="top" style="padding-left: ${item.imageUrl ? "16px" : "0"};">
-      ${titleElement}
-      <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #444444;">${escapeHtml(item.summary)}</p>
-      ${ctaButton}
-    </td>`;
-
-  const imageCell = item.imageUrl
-    ? `<td width="160" valign="top" style="padding-right: 0;">
+  // Image and text are laid out as inline-block "columns" (rather than fixed
+  // table cells) so a media query can stack them on narrow screens — see the
+  // .event-* rules in the <head> <style> block.
+  const imageColumn = item.imageUrl
+    ? `<div class="event-img-col" style="display: inline-block; vertical-align: top; width: 160px;">
         <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.imageAlt || item.title)}" width="160" style="width: 160px; height: 160px; object-fit: cover; border-radius: 8px; display: block;" />
-      </td>`
+      </div>`
     : "";
+
+  const textColumn = `
+    <div class="event-text-col" style="display: inline-block; vertical-align: top; width: ${item.imageUrl ? "calc(100% - 176px)" : "100%"}; padding-left: ${item.imageUrl ? "16px" : "0"}; box-sizing: border-box;">
+      ${titleElement}
+      ${renderSummaryHtml(item.summary, "#444444")}
+      ${ctaButton}
+    </div>`;
 
   return `
     <tr>
       <td style="padding: 20px 0; border-bottom: 1px solid ${BORDER_GRAY};">
-        <table cellpadding="0" cellspacing="0" border="0" width="100%">
-          <tr>
-            ${imageCell}
-            ${textCell}
-          </tr>
-        </table>
+        <div style="font-size: 0;">${imageColumn}${textColumn}</div>
       </td>
     </tr>`;
 }
@@ -131,6 +175,26 @@ function renderSection(section: NewsletterSection): string {
 
 export function renderNewsletterHtml(draft: NewsletterDraft): string {
   const sectionsHtml = draft.sections.map(renderSection).join("");
+
+  // Alpha notice banner (enabled by default). A prominent bar telling readers
+  // the newsletter is still alpha and who to contact about issues.
+  const alphaEnabled = draft.alphaNotice?.enabled ?? true;
+  const alphaText = draft.alphaNotice?.text?.trim() || DEFAULT_ALPHA_NOTICE_TEXT;
+  const alphaNoticeHtml = alphaEnabled
+    ? `
+    <tr>
+      <td style="padding: 20px 20px 0 20px;">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #FCE4F1; border: 1px solid ${MAGENTA}; border-radius: 8px; overflow: hidden;">
+          <tr>
+            <td style="padding: 14px 18px; border-radius: 8px;">
+              <p style="margin: 0 0 4px 0; font-size: 13px; font-weight: 700; color: ${MAGENTA}; text-transform: uppercase; letter-spacing: 0.5px;">&#9888; Alpha</p>
+              <p style="margin: 0; font-size: 14px; line-height: 1.5; color: ${NAVY};">${escapeHtml(alphaText)}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>`
+    : "";
 
   // Render selected cover image if available
   const coverImageHtml =
@@ -188,6 +252,23 @@ export function renderNewsletterHtml(draft: NewsletterDraft): string {
     </xml>
   </noscript>
   <![endif]-->
+  <style>
+    /* On narrow screens, stack the event image above the text (centered) so the
+       text isn't crammed into a tiny column. */
+    @media only screen and (max-width: 480px) {
+      .event-img-col {
+        display: block !important;
+        width: 160px !important;
+        margin: 0 auto 12px auto !important;
+      }
+      .event-text-col {
+        display: block !important;
+        width: 100% !important;
+        padding-left: 0 !important;
+        text-align: center !important;
+      }
+    }
+  </style>
 </head>
 <body style="margin: 0; padding: 0; background-color: ${LIGHT_GRAY}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
   <!-- Preheader -->
@@ -207,6 +288,9 @@ export function renderNewsletterHtml(draft: NewsletterDraft): string {
               <p style="margin: 8px 0 0 0; font-size: 14px; color: ${MAGENTA}; font-weight: 500;">Monthly Newsletter &bull; ${escapeHtml(draft.month)}</p>
             </td>
           </tr>
+
+          <!-- Alpha Notice -->
+          ${alphaNoticeHtml}
 
           <!-- Intro -->
           <tr>
@@ -248,6 +332,11 @@ export function renderNewsletterHtml(draft: NewsletterDraft): string {
 export function renderNewsletterText(draft: NewsletterDraft): string {
   let text = `START Munich Monthly Newsletter - ${draft.month}\n`;
   text += `${"=".repeat(50)}\n\n`;
+
+  if (draft.alphaNotice?.enabled ?? true) {
+    text += `[ALPHA] ${draft.alphaNotice?.text?.trim() || DEFAULT_ALPHA_NOTICE_TEXT}\n\n`;
+  }
+
   text += `${draft.intro}\n\n`;
 
   for (const section of draft.sections) {
@@ -257,7 +346,12 @@ export function renderNewsletterText(draft: NewsletterDraft): string {
 
     for (const item of section.items) {
       text += `• ${item.title}\n`;
-      text += `  ${item.summary}\n`;
+      // Indent each line so multi-line summaries (incl. bullet lists) stay aligned.
+      const summaryLines = item.summary
+        .split("\n")
+        .map((line) => `  ${line.trim()}`)
+        .join("\n");
+      text += `${summaryLines}\n`;
       if (item.url) {
         text += `  → ${item.url}\n`;
       }
