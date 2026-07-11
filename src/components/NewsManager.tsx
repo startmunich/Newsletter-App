@@ -6,6 +6,7 @@ import {
   NewsSelectionItem,
   NewsSelectionSection,
 } from "@/lib/types";
+import { isEventSection } from "@/lib/openai-client";
 
 interface NewsManagerProps {
   draft: NewsletterDraft;
@@ -16,11 +17,8 @@ interface NewsManagerProps {
  * Event sections (upcoming / last month, internal / external) are ordered by
  * date automatically (Luma returns them sorted) and are NOT manually managed
  * here. Only non-event sections (e.g. Internal News) can be selected/reordered.
+ * `isEventSection` is shared with the cover-image prompt builder in openai-client.
  */
-function isEventSection(title: string): boolean {
-  const t = title.toLowerCase();
-  return t.includes("event") || t.includes("upcoming") || t.includes("last month");
-}
 
 function deriveFromSections(draft: NewsletterDraft): NewsSelectionSection[] {
   return draft.sections

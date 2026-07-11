@@ -37,7 +37,7 @@ export interface CoverImage {
   prompt: string;
   imageBase64: string;
   imageUrl?: string;
-  index: number; // 0, 1, or 2
+  index: number; // position of the news item this image represents
   label?: string; // short title of the news story this image represents
 }
 
@@ -72,8 +72,9 @@ export interface NewsletterDraft {
   sections: NewsletterSection[];
   alphaNotice?: AlphaNotice;
   internalNewsMeme?: InternalNewsMeme;
-  coverImages?: CoverImage[]; // 3 generated cover images for user selection
-  selectedCoverImageIndex?: number; // 0, 1, or 2 - which image is selected
+  coverImages?: CoverImage[]; // one generated cover image per news item, for user selection
+  selectedCoverImageIndex?: number; // which generated image is selected as the cover
+  showCoverImageTitle?: boolean; // show the selected cover image's title below it in the newsletter (default true)
   /**
    * Complete news state (all items, their order, and inclusion flags) as
    * managed in the overview "News" panel. The rendered `sections` are derived

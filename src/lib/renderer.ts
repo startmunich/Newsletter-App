@@ -229,11 +229,19 @@ export function renderNewsletterHtml(draft: NewsletterDraft): string {
             : selectedImage?.imageBase64
               ? `data:image/png;base64,${selectedImage.imageBase64}`
               : "";
+          // Caption below the cover image (the news title this image
+          // represents), unless the user disabled it.
+          const showTitle = draft.showCoverImageTitle !== false;
+          const caption =
+            showTitle && selectedImage?.label
+              ? `
+        <p style="margin: 8px 0 0 0; font-size: 12px; line-height: 1.4; color: #666666; text-align: center;">${escapeHtml(selectedImage.label)}</p>`
+              : "";
           if (src) {
             return `
     <tr>
       <td style="padding: 24px 20px 0 20px; text-align: center;">
-        <img src="${src}" alt="Newsletter cover" width="280" style="max-width: 280px; width: 50%; height: auto; border-radius: 12px; margin: 0 auto; display: block;" />
+        <img src="${src}" alt="${escapeHtml(selectedImage?.label || "Newsletter cover")}" width="280" style="max-width: 280px; width: 50%; height: auto; border-radius: 12px; margin: 0 auto; display: block;" />${caption}
       </td>
     </tr>`;
           }

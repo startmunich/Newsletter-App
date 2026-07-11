@@ -150,7 +150,7 @@ export default function CoverImageGeneratorModal({
         {phase === "prompt" && (
           <>
             <p className="text-xs text-[#606078] mb-4">
-              One image is generated per top news story. Edit any prompt below to customize its image. Generation runs in the background.
+              One image is generated per news story. Edit any prompt below to customize its image. Generation runs in the background.
             </p>
 
             {promptLoading && prompts.length === 0 && (
@@ -202,7 +202,7 @@ export default function CoverImageGeneratorModal({
             {generating && (
               <div className="flex items-center gap-3 mb-6 text-[#a0a0b8]">
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#D0006F]"></div>
-                <span>Generating images in the background... ({images.length}/3 ready)</span>
+                <span>Generating images in the background... ({images.length} ready)</span>
               </div>
             )}
 
@@ -228,7 +228,7 @@ export default function CoverImageGeneratorModal({
 
               {/* Placeholder skeletons for images still generating */}
               {generating &&
-                Array.from({ length: Math.max(0, 3 - images.length) }).map((_, i) => (
+                Array.from({ length: Math.max(0, prompts.length - images.length) }).map((_, i) => (
                   <div
                     key={`skeleton-${i}`}
                     className="w-full aspect-square rounded-lg bg-[#2a2a42] animate-pulse"

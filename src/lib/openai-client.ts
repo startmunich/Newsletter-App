@@ -354,16 +354,29 @@ export interface CoverPrompt {
 }
 
 /**
+ * Event sections (upcoming / last month, internal / external) are ordered by
+ * date automatically and are NOT news. Cover images are only generated for
+ * actual news sections (e.g. "Internal News"), so events are filtered out.
+ * Shared with the News overview panel (NewsManager) so both agree on what
+ * counts as an event section.
+ */
+export function isEventSection(title: string): boolean {
+  const t = title.toLowerCase();
+  return t.includes("event") || t.includes("upcoming") || t.includes("last month");
+}
+
+/**
  * Builds one cover image prompt for every news item shown in the newsletter (in
- * newsletter order). No GPT call — the news themselves already carry the
- * ordering/importance. Each prompt names the news, gives the START Munich
- * context, asks for a funny image, and forbids any logo/branding/text on the
- * image (people wearing START Munich merch is fine).
+ * newsletter order), excluding event sections. No GPT call — the news
+ * themselves already carry the ordering/importance. Each prompt names the news,
+ * gives the START Munich context, asks for a funny image, and forbids any
+ * logo/branding/text on the image (people wearing START Munich merch is fine).
  */
 export function buildCoverPromptsFromDraftData(context: {
   sections: Array<{ title: string; items: Array<{ title: string; summary: string }> }>;
 }): CoverPrompt[] {
   const allNews = (context.sections || [])
+    .filter((section) => !isEventSection(section.title))
     .flatMap((section) => section.items || []);
 
   return allNews.map((item) => ({

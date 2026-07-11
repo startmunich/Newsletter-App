@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { PreviewState, CoverImage, NewsletterDraft } from "@/lib/types";
+import { isEventSection } from "@/lib/openai-client";
 import { Sidebar } from "@/components/Sidebar";
 import CoverImageGeneratorModal from "@/components/CoverImageGeneratorModal";
 import NewsManager from "@/components/NewsManager";
@@ -41,6 +42,8 @@ export default function NewsletterDetailPage() {
 
   // Cover image state
   const [coverImages, setCoverImages] = useState<CoverImage[]>([]);
+  const [showCoverImageTitle, setShowCoverImageTitle] = useState(true);
+  const [coverTitleSaving, setCoverTitleSaving] = useState(false);
   const [coverJobStatus, setCoverJobStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [coverJobError, setCoverJobError] = useState<string | null>(null);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
@@ -100,6 +103,9 @@ export default function NewsletterDetailPage() {
             setAlphaText(data.structured.alphaNotice.text || DEFAULT_ALPHA_TEXT);
           }
 
+          // Cover image title caption toggle (default on).
+          setShowCoverImageTitle(data.structured.showCoverImageTitle ?? true);
+
           // If cover images already exist, show them
           if (data.structured.coverImages && data.structured.coverImages.length > 0) {
             setCoverImages(data.structured.coverImages);
@@ -154,6 +160,25 @@ export default function NewsletterDetailPage() {
       console.error("Failed to save alpha notice:", error);
     } finally {
       setAlphaSaving(false);
+    }
+  };
+
+  const handleToggleCoverImageTitle = async (next: boolean) => {
+    setShowCoverImageTitle(next);
+    setCoverTitleSaving(true);
+    try {
+      const response = await fetch(`/api/preview-data/${key}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showCoverImageTitle: next }),
+      });
+      if (!response.ok) throw new Error("Failed to save cover image title setting");
+      const updated = await response.json();
+      setPreview(updated);
+    } catch (error) {
+      console.error("Failed to save cover image title setting:", error);
+    } finally {
+      setCoverTitleSaving(false);
     }
   };
 
@@ -298,6 +323,14 @@ export default function NewsletterDetailPage() {
   const selectedIndex = preview?.structured.selectedCoverImageIndex;
   const isGenerating = coverJobStatus === "running";
 
+  // One cover image is generated per news item (event sections excluded). Used
+  // to size the progress text and skeleton/empty placeholders.
+  const newsCount = (preview?.structured.sections || [])
+    .filter((section) => !isEventSection(section.title))
+    .reduce((sum, section) => sum + (section.items?.length || 0), 0);
+  // Fall back to whatever images already exist if we can't derive a count yet.
+  const expectedImageCount = newsCount > 0 ? newsCount : coverImages.length;
+
   return (
     <div className="flex h-screen bg-navy">
       <Sidebar activeKey={key} />
@@ -429,7 +462,7 @@ export default function NewsletterDetailPage() {
                     {isGenerating && (
                       <p className="text-[#a0a0b8] text-xs mt-1 flex items-center gap-2">
                         <span className="inline-block w-3 h-3 rounded-full border-2 border-[#D0006F] border-t-transparent animate-spin" />
-                        Generating in background... ({coverImages.length}/3 ready)
+                        Generating in background... ({coverImages.length}/{expectedImageCount} ready)
                       </p>
                     )}
                     {coverJobStatus === "done" && coverImages.length > 0 && (
@@ -439,12 +472,26 @@ export default function NewsletterDetailPage() {
                       <p className="text-red-400 text-xs mt-1">{coverJobError}</p>
                     )}
                   </div>
-                  <button
-                    onClick={() => setShowRegenerateModal(true)}
-                    className="px-4 py-1.5 bg-[#2a2a42] text-[#f1f1f5] text-sm font-medium rounded-lg hover:bg-[#3a3a52] transition-colors"
-                  >
-                    Regenerate
-                  </button>
+                  <div className="flex items-center gap-4 shrink-0">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <span className="text-sm text-[#a0a0b8]">
+                        {coverTitleSaving ? "Saving…" : "Show image title"}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={showCoverImageTitle}
+                        disabled={coverTitleSaving}
+                        onChange={(e) => handleToggleCoverImageTitle(e.target.checked)}
+                        className="w-4 h-4 accent-[#D0006F] cursor-pointer"
+                      />
+                    </label>
+                    <button
+                      onClick={() => setShowRegenerateModal(true)}
+                      className="px-4 py-1.5 bg-[#2a2a42] text-[#f1f1f5] text-sm font-medium rounded-lg hover:bg-[#3a3a52] transition-colors"
+                    >
+                      Regenerate
+                    </button>
+                  </div>
                 </div>
 
                 {/* Image grid */}
@@ -480,7 +527,7 @@ export default function NewsletterDetailPage() {
 
                   {/* Skeleton placeholders while generating */}
                   {isGenerating &&
-                    Array.from({ length: Math.max(0, 3 - coverImages.length) }).map((_, i) => (
+                    Array.from({ length: Math.max(0, expectedImageCount - coverImages.length) }).map((_, i) => (
                       <div key={`skeleton-${i}`} className="flex flex-col gap-1">
                         <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">News {coverImages.length + i + 1}</span>
                         <div className="w-full aspect-square rounded-lg bg-[#2a2a42] animate-pulse flex items-center justify-center">
@@ -491,7 +538,7 @@ export default function NewsletterDetailPage() {
 
                   {/* Empty state: never generated */}
                   {coverJobStatus === "idle" && coverImages.length === 0 &&
-                    Array.from({ length: 3 }).map((_, i) => (
+                    Array.from({ length: Math.max(1, expectedImageCount) }).map((_, i) => (
                       <div key={`empty-${i}`} className="flex flex-col gap-1">
                         <span className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider">News {i + 1}</span>
                         <div className="w-full aspect-square rounded-lg border-2 border-dashed border-[#2a2a42] flex items-center justify-center">
