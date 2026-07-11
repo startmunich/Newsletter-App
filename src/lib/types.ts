@@ -82,6 +82,13 @@ export interface NewsletterDraft {
    * `sections` (everything included, existing order).
    */
   newsSelection?: NewsSelectionSection[];
+  /**
+   * Complete event state (all event items, their order, and inclusion flags)
+   * as managed in the overview "Events" panel, grouped by event category
+   * (Upcoming Internal/External, Last Month Internal/External). Same shape and
+   * derivation rules as `newsSelection`, but covers event sections instead.
+   */
+  eventSelection?: NewsSelectionSection[];
 }
 
 export interface GenerationStep {
