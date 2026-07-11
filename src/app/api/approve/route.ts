@@ -9,11 +9,16 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { key, batches } = body;
+    const { key, batches, force } = body;
 
     if (!key || typeof key !== "string") {
       return NextResponse.json({ error: "key is required" }, { status: 400 });
     }
+
+    // Intentional re-send (e.g. to a different batch) bypasses the
+    // already-sent guard below. Defaults to false so accidental double-sends
+    // are still prevented.
+    const forceResend = force === true;
 
     // Optional: send to specific member batches (derived START emails) instead
     // of the default Brevo subscriber list.
@@ -34,10 +39,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (preview.status === "sent") {
+    if (preview.status === "sent" && !forceResend) {
       return NextResponse.json(
-        { error: "This newsletter has already been sent" },
-        { status: 400 }
+        {
+          error: "This newsletter has already been sent",
+          alreadySent: true,
+        },
+        { status: 409 }
       );
     }
 
@@ -101,7 +109,11 @@ export async function POST(request: NextRequest) {
       sentAt: new Date(),
       brevoCampaignId: campaignId,
       ...(recipientEmails
-        ? { sentTo: recipientEmails, sentRecipientCount: recipientEmails.length }
+        ? {
+            sentTo: recipientEmails,
+            sentRecipientCount: recipientEmails.length,
+            sentBatches: batchList,
+          }
         : {}),
     });
 

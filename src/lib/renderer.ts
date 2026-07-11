@@ -125,12 +125,42 @@ function renderEventItem(item: NewsletterItem, isPastEvent: boolean = false): st
     </tr>`;
 }
 
+// Wraps a section body (headline + content rows) in the standard section shell.
+function renderSectionShell(title: string, innerRows: string): string {
+  return `
+    <tr>
+      <td style="padding: 32px 20px 0 20px;">
+        <h2 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 700; color: ${NAVY}; border-bottom: 3px solid ${MAGENTA}; padding-bottom: 8px;">${escapeHtml(title)}</h2>
+        <table cellpadding="0" cellspacing="0" border="0" width="100%">
+          ${innerRows}
+        </table>
+      </td>
+    </tr>`;
+}
+
 function renderSection(section: NewsletterSection): string {
   const normalizedTitle = normalizeSectionTitle(section.title);
   const isInternalNews = normalizedTitle === "Internal News";
   const isPastEventSection = normalizedTitle.toLowerCase().includes("last month");
+  const isUpcomingEventSection = normalizedTitle.toLowerCase().includes("upcoming");
 
-  if (section.items.length === 0) return "";
+  if (section.items.length === 0) {
+    // Upcoming event sections still show their headline plus a note that no
+    // events are planned yet, pointing readers to the member platform.
+    if (isUpcomingEventSection) {
+      const kind = normalizedTitle.toLowerCase().includes("internal") ? "internal" : "external";
+      const emptyRow = `
+          <tr>
+            <td style="padding: 8px 0 4px 0;">
+              <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #444444;">
+                So far no ${kind} events are planned. Check <a href="${EVENTS_DASHBOARD_URL}" target="_blank" style="color: ${MAGENTA}; text-decoration: underline;">the member platform</a> in case something changed.
+              </p>
+            </td>
+          </tr>`;
+      return renderSectionShell(section.title, emptyRow);
+    }
+    return "";
+  }
 
   // For past-event sections, only show the latest few events to keep the
   // newsletter short (especially on mobile). Remaining events are linked via a
@@ -161,16 +191,7 @@ function renderSection(section: NewsletterSection): string {
           </tr>`
       : "";
 
-  return `
-    <tr>
-      <td style="padding: 32px 20px 0 20px;">
-        <h2 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 700; color: ${NAVY}; border-bottom: 3px solid ${MAGENTA}; padding-bottom: 8px;">${escapeHtml(section.title)}</h2>
-        <table cellpadding="0" cellspacing="0" border="0" width="100%">
-          ${itemsHtml}
-          ${seeMoreHtml}
-        </table>
-      </td>
-    </tr>`;
+  return renderSectionShell(section.title, `${itemsHtml}${seeMoreHtml}`);
 }
 
 export function renderNewsletterHtml(draft: NewsletterDraft): string {

@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { store } from "@/lib/store";
 import {
   generateCoverImages,
-  buildDefaultCoverPrompt,
-  generateCoverPromptFromDraftData,
+  buildCoverPromptsFromDraftData,
   type CoverPrompt,
 } from "@/lib/openai-client";
 
@@ -23,33 +22,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Preview not found" }, { status: 404 });
   }
 
-  const openAiApiKey = process.env.OPENAI_API_KEY;
-
-  try {
-    if (openAiApiKey) {
-      const aiPrompt = await generateCoverPromptFromDraftData(
-        {
-          month: preview.structured.month || preview.monthGenerated || "",
-          subject: preview.structured.subject || "",
-          intro: preview.structured.intro || "",
-          sections: preview.structured.sections || [],
-        },
-        openAiApiKey
-      );
-      return NextResponse.json({ prompts: aiPrompt });
-    }
-  } catch (error) {
-    console.error("GET cover prompt AI generation failed, falling back:", error);
-  }
-
-  const fallbackPrompts = buildDefaultCoverPrompt({
-    month: preview.structured.month || preview.monthGenerated || "",
-    subject: preview.structured.subject || "",
-    intro: preview.structured.intro || "",
+  const prompts = buildCoverPromptsFromDraftData({
     sections: preview.structured.sections || [],
   });
 
-  return NextResponse.json({ prompts: fallbackPrompts });
+  return NextResponse.json({ prompts });
 }
 
 // POST: start a background cover image generation job, return jobId immediately
@@ -89,15 +66,9 @@ export async function POST(request: NextRequest) {
       }
       effectivePrompt = filtered;
     } else {
-      effectivePrompt = await generateCoverPromptFromDraftData(
-        {
-          month: preview.structured.month || preview.monthGenerated || "",
-          subject: preview.structured.subject || "",
-          intro: preview.structured.intro || "",
-          sections: preview.structured.sections || [],
-        },
-        openAiApiKey
-      );
+      effectivePrompt = buildCoverPromptsFromDraftData({
+        sections: preview.structured.sections || [],
+      });
     }
 
     const jobId = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

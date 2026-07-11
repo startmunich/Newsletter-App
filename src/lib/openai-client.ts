@@ -346,40 +346,6 @@ export async function generateMultipleImages(
   return results;
 }
 
-// Appended to every cover prompt so the image model knows it should be a cover
-// image for the given news in a newsletter.
-const COVER_IMAGE_CONTEXT =
-  "This image should be a cover image for the START Munich newsletter. START Munich is a student club that focus on entrepreneurship, startups, and innovation. The image should be visually appealing and relevant to the news story it represents. The image should not contain any text or logos (except on clothing or merchandise). It should be suitable for use as a newsletter cover image.";
-
-
-
-export function buildDefaultCoverPrompt(context: {
-  month: string;
-  subject: string;
-  intro: string;
-  sections?: Array<{ title: string; items: Array<{ title: string; summary: string }> }>;
-}): CoverPrompt[] {
-  // Fallback when the AI selection call fails: take the first few news items
-  // across the sections and build a short prompt for each.
-  const newsItems = (context.sections || [])
-    .flatMap((section) => section.items)
-    .slice(0, 3);
-
-  if (newsItems.length > 0) {
-    return newsItems.map((item) => ({
-      label: item.title,
-      prompt: `${item.title}. ${item.summary} ${COVER_IMAGE_CONTEXT}`,
-    }));
-  }
-
-  return [
-    {
-      label: context.subject || context.month,
-      prompt: `${context.subject || `START Munich newsletter ${context.month}`}. ${COVER_IMAGE_CONTEXT}`,
-    },
-  ];
-}
-
 export interface CoverPrompt {
   /** Short title of the news story this image represents (for UI labels). */
   label: string;
@@ -388,83 +354,23 @@ export interface CoverPrompt {
 }
 
 /**
- * Uses a GPT call to pick the top 3 most important news stories from the
- * newsletter, then returns one short image prompt per story. Every image uses
- * the same style (no meme/photo/creative themes) — the prompt just describes
- * the news and notes it is for the START Munich newsletter.
+ * Builds one cover image prompt for every news item shown in the newsletter (in
+ * newsletter order). No GPT call — the news themselves already carry the
+ * ordering/importance. Each prompt names the news, gives the START Munich
+ * context, asks for a funny image, and forbids any logo/branding/text on the
+ * image (people wearing START Munich merch is fine).
  */
-export async function generateCoverPromptFromDraftData(
-  context: {
-    month: string;
-    subject: string;
-    intro: string;
-    sections: Array<{ title: string; items: Array<{ title: string; summary: string }> }>;
-  },
-  apiKey: string
-): Promise<CoverPrompt[]> {
-  const compactSections = context.sections
-    .slice(0, 6)
-    .map((section) => ({
-      title: section.title,
-      items: section.items.slice(0, 5).map((item) => ({ title: item.title, summary: item.summary })),
-    }));
+export function buildCoverPromptsFromDraftData(context: {
+  sections: Array<{ title: string; items: Array<{ title: string; summary: string }> }>;
+}): CoverPrompt[] {
+  const allNews = (context.sections || [])
+    .flatMap((section) => section.items || []);
 
-  const requestBody = {
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You select the most important news from a newsletter and write short DALL-E image prompts for them. Keep each prompt as short as possible: just describe the news. Return ONLY valid JSON.",
-      },
-      {
-        role: "user",
-        content: `From this newsletter data, pick the 3 most important news stories and write one short cover image prompt for each:\n\n${JSON.stringify(
-          {
-            month: context.month,
-            subject: context.subject,
-            intro: context.intro,
-            sections: compactSections,
-          },
-          null,
-          2
-        )}\n\nReturn JSON: { "news": [ { "label": "<short news title>", "prompt": "<short prompt describing the news>" }, ... ] } with exactly 3 items. Each prompt must be as short as possible and only describe the news.`,
-      },
-    ],
-    response_format: { type: "json_object" },
-  };
-
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Cover prompt generation failed: ${response.status} ${errorText}`);
-  }
-
-  const data = await response.json();
-  const parsed = JSON.parse(extractResponseText(data));
-  const news: unknown[] = Array.isArray(parsed.news) ? parsed.news : [];
-
-  return news
-    .map((n): CoverPrompt => {
-      const item = (n ?? {}) as { label?: unknown; prompt?: unknown };
-      const rawPrompt = String(item.prompt || "").trim();
-      return {
-        label: String(item.label || "").trim(),
-        // Append the START Munich context so the image knows what the club is
-        // and that it is a cover image for the given news.
-        prompt: rawPrompt ? `${rawPrompt} ${COVER_IMAGE_CONTEXT}` : "",
-      };
-    })
-    .filter((p) => p.prompt.length > 0)
-    .slice(0, 3);
+  return allNews.map((item) => ({
+    label: item.title,
+    prompt: `Create a cover image for the following news for a newsletter. The news title is: ${item.title}. The description is: ${item.summary}
+The newsletter is from START Munich. A Munich student club that focus on entrepreneurship, startups, and innovation. The image should be funny and humorous. The image should not contain the START Munich logo or any other branding/text on the image (people wearing START Munich merch is fine).`,
+  }));
 }
 
 export async function generateCoverImages(

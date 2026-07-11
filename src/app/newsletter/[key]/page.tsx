@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { PreviewState, CoverImage } from "@/lib/types";
+import { PreviewState, CoverImage, NewsletterDraft } from "@/lib/types";
 import { Sidebar } from "@/components/Sidebar";
 import CoverImageGeneratorModal from "@/components/CoverImageGeneratorModal";
+import NewsManager from "@/components/NewsManager";
 import Link from "next/link";
 
 export default function NewsletterDetailPage() {
@@ -156,6 +157,17 @@ export default function NewsletterDetailPage() {
     }
   };
 
+  const handleSaveNews = async (payload: Partial<NewsletterDraft>) => {
+    const response = await fetch(`/api/preview-data/${key}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error("Failed to save news selection");
+    const updated = await response.json();
+    setPreview(updated);
+  };
+
   const handleSendTest = async () => {
     if (!testEmail.trim()) return;
     setSending(true);
@@ -240,14 +252,14 @@ export default function NewsletterDetailPage() {
     }
   };
 
-  const handleSendGeneral = async () => {
+  const handleSendGeneral = async (force = false) => {
     if (selectedBatches.length === 0 || !recipientsLoaded || recipients.length === 0) return;
     setSending(true);
     try {
       const response = await fetch("/api/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, batches: selectedBatches }),
+        body: JSON.stringify({ key, batches: selectedBatches, force }),
       });
 
       const data = await response.json().catch(() => null);
@@ -260,6 +272,19 @@ export default function NewsletterDetailPage() {
         setShowEmailModal(false);
         const r = await fetch(`/api/preview-data/${key}`);
         if (r.ok) setPreview(await r.json());
+      } else if (data?.alreadySent && !force) {
+        // Already sent once. Let the user knowingly re-send (e.g. a different
+        // batch was selected) instead of hard-blocking them.
+        const confirmed = window.confirm(
+          `This newsletter was already sent. Send it again to the ` +
+            `${recipients.length} selected recipient${
+              recipients.length === 1 ? "" : "s"
+            }?`
+        );
+        if (confirmed) {
+          await handleSendGeneral(true);
+          return;
+        }
       } else {
         alert(data?.error || "Failed to send newsletter");
       }
@@ -327,6 +352,21 @@ export default function NewsletterDetailPage() {
                       <div className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider mb-2">Recipients</div>
                       <div className="text-lg font-bold text-[#f1f1f5]">{preview.sentRecipientCount || "—"}</div>
                     </div>
+                    {preview.sentBatches && preview.sentBatches.length > 0 && (
+                      <div className="bg-[#1a1a2e] border border-[#2a2a42] rounded-lg p-4">
+                        <div className="text-xs font-semibold text-[#a0a0b8] uppercase tracking-wider mb-2">Batches</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {preview.sentBatches.map((batch) => (
+                            <span
+                              key={batch}
+                              className="inline-block px-2 py-0.5 bg-[#2a2a42] text-[#f1f1f5] text-xs font-medium rounded"
+                            >
+                              {batch}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -461,6 +501,13 @@ export default function NewsletterDetailPage() {
                     ))}
                 </div>
               </div>
+
+              {/* News Section — select & reorder */}
+              <NewsManager
+                key={preview.updatedAt?.toString()}
+                draft={preview.structured}
+                onSave={handleSaveNews}
+              />
             </div>
 
             {/* Right: Newsletter Preview */}
@@ -636,7 +683,7 @@ export default function NewsletterDetailPage() {
                 Cancel
               </button>
               <button
-                onClick={emailMode === "test" ? handleSendTest : handleSendGeneral}
+                onClick={emailMode === "test" ? handleSendTest : () => handleSendGeneral()}
                 disabled={
                   sending ||
                   (emailMode === "test"

@@ -12,6 +12,21 @@ export interface NewsletterSection {
   items: NewsletterItem[];
 }
 
+/**
+ * Full, editable news state per section. Stores every extracted news item
+ * (including deselected ones) together with the user's ordering and
+ * inclusion choice. The rendered newsletter is derived from this by keeping
+ * only `included` items, in array order, back into `sections[].items`.
+ */
+export interface NewsSelectionItem extends NewsletterItem {
+  included: boolean;
+}
+
+export interface NewsSelectionSection {
+  title: string;
+  items: NewsSelectionItem[];
+}
+
 export interface GeneratedImage {
   prompt: string;
   imageBase64?: string;
@@ -59,6 +74,13 @@ export interface NewsletterDraft {
   internalNewsMeme?: InternalNewsMeme;
   coverImages?: CoverImage[]; // 3 generated cover images for user selection
   selectedCoverImageIndex?: number; // 0, 1, or 2 - which image is selected
+  /**
+   * Complete news state (all items, their order, and inclusion flags) as
+   * managed in the overview "News" panel. The rendered `sections` are derived
+   * from this. Absent for older drafts, in which case it is initialized from
+   * `sections` (everything included, existing order).
+   */
+  newsSelection?: NewsSelectionSection[];
 }
 
 export interface GenerationStep {
@@ -93,6 +115,7 @@ export interface PreviewState {
   testEmailTo?: string;
   sentTo?: string[];
   sentRecipientCount?: number;
+  sentBatches?: string[]; // member batches the newsletter was sent to
   monthGenerated?: string;
   coverImageJobId?: string; // background job ID for initial auto-generation
 }

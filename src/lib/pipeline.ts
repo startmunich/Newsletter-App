@@ -7,8 +7,7 @@ import {
   generateDraftText,
   runQaPass,
   generateCoverImages,
-  generateCoverPromptFromDraftData,
-  buildDefaultCoverPrompt,
+  buildCoverPromptsFromDraftData,
   type CoverPrompt,
 } from "./openai-client";
 import { compressPdf } from "./nutrient";
@@ -250,26 +249,9 @@ export async function runPipeline(jobId: string, input: PipelineInput): Promise<
 
     // Start cover image generation in background automatically
     const coverJobId = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    let coverPrompts: CoverPrompt[];
-    try {
-      coverPrompts = await generateCoverPromptFromDraftData(
-        {
-          month: draft.month,
-          subject: draft.subject,
-          intro: draft.intro,
-          sections: draft.sections || [],
-        },
-        input.openAiApiKey
-      );
-    } catch (error) {
-      console.error("Pipeline cover prompt AI generation failed, using fallback:", error);
-      coverPrompts = buildDefaultCoverPrompt({
-        month: draft.month,
-        subject: draft.subject,
-        intro: draft.intro,
-        sections: draft.sections || [],
-      });
-    }
+    const coverPrompts: CoverPrompt[] = buildCoverPromptsFromDraftData({
+      sections: draft.sections || [],
+    });
 
     store.createCoverImageJob(coverJobId, previewKey, coverPrompts[0]?.prompt ?? "");
     store.updateCoverImageJob(coverJobId, { status: "running" });
